@@ -3,15 +3,19 @@ import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
+  
+  <nav style="display: flex; gap: 20px; align-items: center; justify-content: space-between;  border-bottom: 1px solid #eee; width: 90vw;">
+    <HelloWorld msg="Ssr Editor" /> 
+    <ul style="display: flex; gap: 20px; list-style: none;">
+      <li><a href="/test">Test</a></li>
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+    </ul>
+  </nav>
   <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+    
   </div>
-  <HelloWorld msg="Vite + Vue" />
+  
 </template>
 
 <style scoped>
