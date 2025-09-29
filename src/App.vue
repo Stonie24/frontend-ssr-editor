@@ -37,7 +37,7 @@ const saveDoc = async () => {
 </script>
 
 <template>
-  <div>
+  <div class="all-docs">
     <h1>Documents</h1>
     <div v-if="error">{{ error }}</div>
 
@@ -47,8 +47,9 @@ const saveDoc = async () => {
         <a href="#" @click.prevent="selectDoc(d)">{{ d.title }}</a>
       </h3>
     </div>
-
-    <h2>{{ selectedDoc && selectedDoc._id ? 'Edit Document' : 'Add New Document' }}</h2>
+   </div>
+    <div class="doc-form">
+         <h2>{{ selectedDoc && selectedDoc._id ? 'Edit Document' : 'Add New Document' }}</h2>
     <form @submit.prevent="saveDoc" class="new-doc">
       <div id="doc-header">
          <label for="title"> <h3>Title</h3></label>
@@ -62,5 +63,7 @@ const saveDoc = async () => {
 
       
     </form>
-  </div>
+    </div>
+   
+  
 </template>
