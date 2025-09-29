@@ -52,13 +52,13 @@ const saveDoc = async () => {
     <form @submit.prevent="saveDoc" class="new-doc">
       <label for="title">Title</label>
       <input id="title" v-model="selectedDoc.title" placeholder="Title" required />
-
-      <label for="content">Content</label>
-      <textarea id="content" v-model="selectedDoc.content" placeholder="Content" required></textarea>
-
       <button type="submit">
-        {{ selectedDoc && selectedDoc._id ? 'Update' : 'Create' }}
+        {{ selectedDoc && selectedDoc._id ? 'Save' : 'Create' }}
       </button>
+      <label for="content">Content</label>
+      <textarea id="content" v-model="selectedDoc.content" placeholder="Content" required class="document-body"></textarea>
+
+      
     </form>
   </div>
 </template>
