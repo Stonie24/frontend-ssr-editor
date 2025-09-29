@@ -37,6 +37,7 @@ const saveDoc = async () => {
 </script>
 
 <template>
+  <div id="entire-app">
   <div class="all-docs">
     <h1>Documents</h1>
     <div v-if="error">{{ error }}</div>
@@ -64,6 +65,8 @@ const saveDoc = async () => {
       
     </form>
     </div>
+  </div>
+
    
   
 </template>
