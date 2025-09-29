@@ -37,7 +37,7 @@ h1 {
 
 button {
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: 1px solid #ffffff;
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
@@ -92,7 +92,10 @@ button:focus-visible {
   justify-content: space-between;
   margin-bottom: 1em;
 }
-
+.doc-header  {
+  display: flex;
+  justify-content: space-evenly;
+}
 .all-docs {
   display: flex;
   justify-content: space-between;

@@ -39,7 +39,7 @@ const saveDoc = async () => {
 <template>
   <div id="entire-app">
   <div class="all-docs">
-    <h1>Documents</h1>
+    <h1> <a href="/"></a>Documents</h1>
     <div v-if="error">{{ error }}</div>
 
     <h2>All Documents</h2>
