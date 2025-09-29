@@ -8,9 +8,14 @@ const newDoc = ref({ title: "", content: "" });
 onMounted(fetchDocuments);
 
 const createDoc = async () => {
-  await addDocument(newDoc.value);
-  newDoc.value.title = "";
-  newDoc.value.content = "";
+  try {
+    await addDocument(newDoc.value);
+    newDoc.value.title = "";
+    newDoc.value.content = "";
+    await fetchDocuments(); // refresh the list
+  } catch (err) {
+    console.error(err);
+  }
 };
 </script>
 
@@ -19,13 +24,21 @@ const createDoc = async () => {
     <h1>Documents</h1>
     <div v-if="error">{{ error }}</div>
 
-    <ul>
-      <li v-for="d in documents" :key="d.id">{{ d.title }}</li>
-    </ul>
+    <div v-for="d in documents" :key="d._id">
+      <h3>
+        <a :href="'/' + d._id">{{ d.title }}</a>
+      </h3>
+    </div>
 
     <h2>Add New Document</h2>
-    <input v-model="newDoc.title" placeholder="Title" />
-    <textarea v-model="newDoc.content" placeholder="Content"></textarea>
-    <button @click="createDoc">Add Document</button>
+    <form @submit.prevent="createDoc">
+      <label for="title">Title</label>
+      <input id="title" v-model="newDoc.title" placeholder="Title" />
+
+      <label for="content">Content</label>
+      <textarea id="content" v-model="newDoc.content" placeholder="Content"></textarea>
+
+      <button type="submit">Add Document</button>
+    </form>
   </div>
 </template>
