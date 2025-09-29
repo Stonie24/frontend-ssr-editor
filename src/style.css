@@ -79,6 +79,13 @@ button:focus-visible {
   resize: vertical;
 }
 
+.doc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1em;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
