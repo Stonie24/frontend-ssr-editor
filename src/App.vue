@@ -13,3 +13,5 @@ export default {
   name: "App",
 };
 </script>
+
+<style src="./style/style.css" scoped></style>

@@ -30,10 +30,12 @@ const saveDoc = async (doc) => {
 
 <template>
   <div id="entire-app">
-    <h1>Documents</h1>
+
     <div v-if="error">{{ error }}</div>
 
     <DocumentList :documents="documents" @select="selectDoc" />
     <DocumentForm :doc="selectedDoc" @save="saveDoc" />
   </div>
 </template>
+
+<style src="../style/docs.css" scoped></style>
