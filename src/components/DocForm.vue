@@ -1,12 +1,10 @@
-<script setup lang="ts">
+<script setup>
 import { ref, watch } from "vue";
 
-type DocType = { _id?: string; title: string; content: string; created_at?: string };
+const props = defineProps(['doc']);
+const emit = defineEmits(['save']);
 
-const props = defineProps<{ doc: DocType | null }>();
-const emit = defineEmits<{ (e: "save", doc: DocType): void }>();
-
-const localDoc = ref<DocType>({ title: "", content: "" });
+const localDoc = ref({ title: "", content: "" });
 
 watch(
   () => props.doc,

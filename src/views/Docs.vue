@@ -1,21 +1,19 @@
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted } from "vue";
 import { useDocuments } from "../composables/useDocuments";
 import DocumentList from "../components/DocList.vue";
 import DocumentForm from "../components/DocForm.vue";
 
-type DocType = { _id?: string; title: string; content: string; created_at?: string };
-
 const { documents, fetchDocuments, addDocument, updateDocument, error } = useDocuments();
-const selectedDoc = ref<DocType | null>(null);
+const selectedDoc = ref(null);
 
 onMounted(fetchDocuments);
 
-const selectDoc = (doc: DocType) => {
+const selectDoc = (doc) => {
   selectedDoc.value = { ...doc };
 };
 
-const saveDoc = async (doc: DocType) => {
+const saveDoc = async (doc) => {
   try {
     if (doc._id) {
       await updateDocument(doc._id, doc);

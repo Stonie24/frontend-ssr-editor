@@ -1,8 +1,6 @@
-<script setup lang="ts">
-defineProps<{ documents: any[] }>();
-defineEmits<{
-  (e: "select", doc: any): void;
-}>();
+<script setup>
+defineProps(['documents']);
+defineEmits(['select']);
 </script>
 
 <template>
