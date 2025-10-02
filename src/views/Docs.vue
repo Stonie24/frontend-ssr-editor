@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import { useDocuments } from "../composables/useDocuments";
+import { useDocuments } from "../composables/useDocuments.js";
 import DocumentList from "../components/DocList.vue";
 import DocumentForm from "../components/DocForm.vue";
 
