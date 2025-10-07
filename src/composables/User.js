@@ -9,14 +9,23 @@ export function User() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),
             });
-            if (!response.ok) throw new Error("Failed to log in");
+
             const result = await response.json();
+            if (!response.ok) throw new Error(result.message);
+
+            localStorage.setItem("token", result.token);
+            localStorage.setItem("user", JSON.stringify(result.user));
+            console.log("Login successful:", result);
+            console.log("Token stored:", result.token);
+            console.log("User stored:", result.user);
+
             return result;
         } catch (err) {
-            console.error(err);
+            console.error("Login error:", err);
             return null;
         }
     };
+
 
     const SignUp = async (email, password) => {
         try {
@@ -38,4 +47,15 @@ export function User() {
         LogIn,
         SignUp
     };
+}
+
+export function useAuth() {
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return { token, user };
+}
+
+export function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
 }
