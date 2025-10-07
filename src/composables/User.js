@@ -2,29 +2,26 @@ import { ref } from "vue";
 const API_URL = import.meta.env.VITE_API_URL;
 
 export function User() {
-    const LogIn = async (email, password) => {
-        try {
-            const response = await fetch(`${API_URL}/api/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-            });
+  const { setAuth } = useAuth();
 
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message);
+  const LogIn = async (email, password) => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-            localStorage.setItem("token", result.token);
-            localStorage.setItem("user", JSON.stringify(result.user));
-            console.log("Login successful:", result);
-            console.log("Token stored:", result.token);
-            console.log("User stored:", result.user);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message);
+      setAuth(result.token, result.user);
 
-            return result;
-        } catch (err) {
-            console.error("Login error:", err);
-            return null;
-        }
-    };
+      return result;
+    } catch (err) {
+      console.error("Login error:", err);
+      return null;
+    }
+  };
 
 
     const SignUp = async (email, password) => {
@@ -50,12 +47,28 @@ export function User() {
 }
 
 export function useAuth() {
-    const token = localStorage.getItem("token");
-    const user = JSON.parse(localStorage.getItem("user") || "null");
-    return { token, user };
+  const token = ref(localStorage.getItem("token") || "");
+  const user = ref(JSON.parse(localStorage.getItem("user") || "null"));
+
+  function setAuth(newToken, newUser) {
+    token.value = newToken;
+    user.value = newUser;
+    localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(newUser));
+  }
+
+  function clearAuth() {
+    token.value = "";
+    user.value = null;
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  }
+
+  return { token, user, setAuth, clearAuth };
 }
 
 export function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 }
+

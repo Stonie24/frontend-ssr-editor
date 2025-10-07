@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { useAuth } from "./User.js";
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = "http://localhost:1337";
 
 export function useDocuments() {
   const documents = ref([]);
@@ -14,6 +14,7 @@ export function useDocuments() {
       const res = await fetch(`${API_URL}/api/docs`, {
         headers: { Authorization: `Bearer ${token?.value || ''}` },
       });
+      console.log("Token used in fetchDocuments:", token?.value);
       console.log("Fetch documents response:", res);
 
       if (!res.ok) throw new Error("Unauthorized or failed to fetch docs");
@@ -51,7 +52,7 @@ export function useDocuments() {
       });
       if (!response.ok) throw new Error("Failed to add document");
       const result = await response.json();
-      documents.value.push(result); // Optional: add to local state
+      documents.value.push(result);
       return result;
     } catch (err) {
       error.value = err.message;
