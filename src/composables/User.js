@@ -1,5 +1,5 @@
 import { ref } from "vue";
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = "http://localhost:1337";
 
 export function User() {
   const { setAuth } = useAuth();
