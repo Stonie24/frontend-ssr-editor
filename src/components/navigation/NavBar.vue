@@ -5,7 +5,7 @@
     </nav>
   </div>
 </template>
-
+<style src="../../style/navbar.css" scoped></style>
 <script setup>
 
 import NavBarTabs from "./NavBarTabs.vue";

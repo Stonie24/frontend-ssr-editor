@@ -1,0 +1,19 @@
+.nav-bar {
+    font-size: 1.4rem;
+    padding: 0.4rem;
+    width: 100%;
+}
+.nav-bar-tabs{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+}
+
+button{
+    background-color: red;
+    color: white;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
