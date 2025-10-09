@@ -46,11 +46,13 @@ const handleSubmit = async (event) => {
 		<input v-model="email" type="email" placeholder="Email" required />
 		<input v-model="password" type="password" placeholder="Password" required />
 
-		<button type="submit" name="action" value="login" :disabled="isLoading">
+		<button type="submit" name="action" value="login" :disabled="isLoading" class="login-button">
 			{{ isLoading ? "Logging in..." : "Log in" }}
 		</button>
-		<button type="submit" name="action" value="signup" :disabled="isLoading">
+		<button type="submit" name="action" value="signup" :disabled="isLoading" class="signup-button">
 			{{ isLoading ? "Creating account..." : "Sign up" }}
 		</button>
 	</form>
 </template>
+
+<style src="../style/login.css" scoped></style>
