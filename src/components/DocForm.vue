@@ -36,3 +36,5 @@ const submit = () => {
     </form>
   </div>
 </template>
+
+<style src="../style/docs.css" scoped></style>
