@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from "vue";
+import { useRouter } from "vue-router";
 import { User } from "../composables/User.js";
 
+const router = useRouter();
 const { LogIn, SignUp } = User();
 const email = ref("");
 const password = ref("");
@@ -15,9 +17,16 @@ const handleSubmit = async (event) => {
 	error.value = "";
 
 	try {
-		if (action === "login") {
-			const result = await LogIn(email.value, password.value);
-			console.log("Login:", result);
+			if (action === "login") {
+				const result = await LogIn(email.value, password.value);
+				console.log("Login:", result);
+				if (result && result.token) {
+					
+					router.push('/docs');
+					return;
+				} else {
+					error.value = 'Login failed. Check credentials.';
+				}
 		} else if (action === "signup") {
 			const result = await SignUp(email.value, password.value);
 			console.log("Signup:", result);
