@@ -56,4 +56,3 @@ const saveDoc = async (doc) => {
   </div>
 </template>
 
-<style src="../style/docs.css" scoped></style>
