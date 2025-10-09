@@ -19,8 +19,14 @@
   margin-bottom: 1em;
 }
 #doc-header  {
-  display: flex;
-  justify-content: space-evenly;
+  display: grid;
+  justify-content: center;
+  gap: 1em;
+  margin-bottom: 1rem;
+}
+
+#title{
+  font-size: 1.2em;
 }
 .all-docs {
   display: grid;
