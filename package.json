@@ -13,8 +13,10 @@
     "@reduxjs/toolkit": "^2.9.0",
     "@reduxjs/vue-redux": "^1.0.1",
     "jsonwebtoken": "^9.0.2",
+    "socket.io-client": "^4.8.1",
     "vue": "^3.5.18",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "vue-socket.io": "^3.0.10"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
