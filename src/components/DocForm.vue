@@ -9,25 +9,34 @@ const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
 
 const localDoc = ref({ title: "", content: "" });
+
+// Yjs document and shared text
 let ydoc = null;
 let ytext = null;
+
+// Track the docId we're currently editing
 let currentDocId = null;
 
 // ---------------------------
-// Save-on-join listener
+// Listen for save requests from server (save-on-join)
 // ---------------------------
 socket.on("requestSave", async ({ docId }) => {
-  if (docId !== currentDocId) return;
-  const updatedDoc = { ...localDoc.value };
-  try {
-    await fetch(`/api/docs/${docId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedDoc),
-    });
-    console.log("Document saved for joining user.");
-  } catch (err) {
-    console.error("Failed to save document:", err);
+  if (docId === currentDocId) {
+    console.log("Server requested save before new user joins.");
+
+    const updatedDoc = { ...localDoc.value, content: ytext ? ytext.toString() : localDoc.value.content };
+
+
+    try {
+      await fetch(`/api/docs/${docId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDoc),
+      });
+      console.log("Document saved successfully.");
+    } catch (err) {
+      console.error("Failed to save document:", err);
+    }
   }
 });
 
@@ -38,7 +47,10 @@ watch(
   () => props.doc,
   (v) => {
     localDoc.value = v ? { ...v } : { title: "", content: "" };
+
     if (v && v._id) {
+      console.log("Joining collaborative document:", v._id);
+
       currentDocId = v._id;
       socket.emit("joinDoc", currentDocId);
     }
@@ -47,19 +59,24 @@ watch(
 );
 
 // ---------------------------
-// Handle initDoc
+// Handle initial document state from server
 // ---------------------------
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
 
+  console.log("Received initial document state for", docId);
+
+  // Only create Yjs doc if it doesn't exist
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
 
-    // Observe changes
+    // Observe Yjs changes and sync to Vue
     ytext.observe(() => {
       const newContent = ytext.toString();
-      if (localDoc.value.content !== newContent) localDoc.value.content = newContent;
+      if (localDoc.value.content !== newContent) {
+        localDoc.value.content = newContent;
+      }
     });
 
     // Emit local changes
@@ -68,19 +85,21 @@ socket.on("initDoc", ({ docId, update }) => {
     });
   }
 
-  // Merge the incoming update
+  // Apply incoming update (merge with existing Yjs state)
   Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
 // ---------------------------
-// Incremental updates
+// Receive incremental updates from other users
 // ---------------------------
 socket.on("docUpdate", ({ docId, update }) => {
-  if (docId === currentDocId && ydoc) Y.applyUpdate(ydoc, new Uint8Array(update));
+  if (docId === currentDocId && ydoc) {
+    Y.applyUpdate(ydoc, new Uint8Array(update));
+  }
 });
 
 // ---------------------------
-// Sync Vue <-> Yjs
+// Watch local Vue model and update Yjs text
 // ---------------------------
 watch(
   () => localDoc.value.content,
@@ -93,15 +112,16 @@ watch(
 );
 
 // ---------------------------
-// Manual save
+// Save button logic (manual save)
 // ---------------------------
 const submit = () => {
-  const updatedDoc = { ...localDoc.value, updated_at: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const updatedDoc = { ...localDoc.value, updated_at: now };
   emit("save", updatedDoc);
 };
 
 // ---------------------------
-// Cleanup
+// Clean up socket listeners on unmount
 // ---------------------------
 onUnmounted(() => {
   socket.off("docUpdate");
@@ -109,7 +129,6 @@ onUnmounted(() => {
   socket.off("requestSave");
 });
 </script>
-
 
 
 
