@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 
@@ -17,7 +17,34 @@ let ytext = null;
 // Track the docId we're currently editing
 let currentDocId = null;
 
-// Watch when the prop `doc` changes
+// ---------------------------
+// Listen for save requests from server (save-on-join)
+// ---------------------------
+socket.on("requestSave", async ({ docId }) => {
+  if (docId === currentDocId) {
+    console.log("Server requested save before new user joins.");
+
+    const updatedDoc = {
+      ...localDoc.value,
+      content: localDoc.value.content,
+    };
+
+    try {
+      await fetch(`/api/docs/${docId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDoc),
+      });
+      console.log("Document saved successfully.");
+    } catch (err) {
+      console.error("Failed to save document:", err);
+    }
+  }
+});
+
+// ---------------------------
+// Watch for doc prop changes
+// ---------------------------
 watch(
   () => props.doc,
   (v) => {
@@ -28,69 +55,84 @@ watch(
 
       currentDocId = v._id;
       socket.emit("joinDoc", currentDocId);
-
-      // Create new Yjs doc
-      ydoc = new Y.Doc();
-      ytext = ydoc.getText("content");
-
-      // When Yjs changes locally, emit an update to the backend
-      ydoc.on("update", (update) => {
-        socket.emit("docChange", { docId: currentDocId, update });
-      });
-
-      // When the Yjs shared text changes, update the local Vue model
-      ytext.observe(() => {
-        const newContent = ytext.toString();
-        if (localDoc.value.content !== newContent) {
-          localDoc.value.content = newContent;
-        }
-      });
     }
   },
   { immediate: true }
 );
 
-// Receive initial doc state from backend
+// ---------------------------
+// Handle initial document state from server
+// ---------------------------
 socket.on("initDoc", ({ docId, update }) => {
-  if (docId === currentDocId && ydoc) {
-    console.log("Received initial document state for", docId);
-    Y.applyUpdate(ydoc, new Uint8Array(update));
-  }
+  if (docId !== currentDocId) return;
+
+  console.log("Received initial document state for", docId);
+
+  // Destroy old Yjs doc to avoid ghost text
+  if (ydoc) ydoc.destroy();
+
+  // Create a fresh Yjs doc
+  ydoc = new Y.Doc();
+  ytext = ydoc.getText("content");
+
+  // Apply the update from server
+  Y.applyUpdate(ydoc, new Uint8Array(update));
+
+  // Observe Yjs changes and sync to localDoc
+  ytext.observe(() => {
+    const newContent = ytext.toString();
+    if (localDoc.value.content !== newContent) {
+      localDoc.value.content = newContent;
+    }
+  });
+
+  // Emit local changes to other clients
+  ydoc.on("update", (update) => {
+    socket.emit("docChange", { docId: currentDocId, update });
+  });
 });
 
+// ---------------------------
 // Receive incremental updates from other users
+// ---------------------------
 socket.on("docUpdate", ({ docId, update }) => {
   if (docId === currentDocId && ydoc) {
     Y.applyUpdate(ydoc, new Uint8Array(update));
   }
 });
 
-// Watch for local text edits
+// ---------------------------
+// Watch local Vue model and update Yjs text
+// ---------------------------
 watch(
   () => localDoc.value.content,
-  (newValue, oldValue) => {
-    // Prevent feedback loop: only update Yjs if change originated locally
+  (newValue) => {
     if (ytext && newValue !== ytext.toString()) {
-      // Replace full text (for simplicity)
       ytext.delete(0, ytext.length);
       ytext.insert(0, newValue);
     }
   }
 );
 
-// Save button logic
+// ---------------------------
+// Save button logic (manual save)
+// ---------------------------
 const submit = () => {
   const now = new Date().toISOString();
-  const updatedDoc = { ...localDoc.value, created_at: now };
+  const updatedDoc = { ...localDoc.value, updated_at: now };
   emit("save", updatedDoc);
 };
 
-// Clean up when leaving component
+// ---------------------------
+// Clean up socket listeners on unmount
+// ---------------------------
 onUnmounted(() => {
   socket.off("docUpdate");
   socket.off("initDoc");
+  socket.off("requestSave");
 });
 </script>
+
 
 
 <template>
