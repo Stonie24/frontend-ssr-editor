@@ -68,28 +68,27 @@ socket.on("initDoc", ({ docId, update }) => {
 
   console.log("Received initial document state for", docId);
 
-  // Destroy old Yjs doc to avoid ghost text
-  if (ydoc) ydoc.destroy();
+  // Only create Yjs doc if it doesn't exist
+  if (!ydoc) {
+    ydoc = new Y.Doc();
+    ytext = ydoc.getText("content");
 
-  // Create a fresh Yjs doc
-  ydoc = new Y.Doc();
-  ytext = ydoc.getText("content");
+    // Observe Yjs changes and sync to Vue
+    ytext.observe(() => {
+      const newContent = ytext.toString();
+      if (localDoc.value.content !== newContent) {
+        localDoc.value.content = newContent;
+      }
+    });
 
-  // Apply the update from server
+    // Emit local changes
+    ydoc.on("update", (update) => {
+      socket.emit("docChange", { docId: currentDocId, update });
+    });
+  }
+
+  // Apply incoming update (merge with existing Yjs state)
   Y.applyUpdate(ydoc, new Uint8Array(update));
-
-  // Observe Yjs changes and sync to localDoc
-  ytext.observe(() => {
-    const newContent = ytext.toString();
-    if (localDoc.value.content !== newContent) {
-      localDoc.value.content = newContent;
-    }
-  });
-
-  // Emit local changes to other clients
-  ydoc.on("update", (update) => {
-    socket.emit("docChange", { docId: currentDocId, update });
-  });
 });
 
 // ---------------------------
