@@ -7,10 +7,12 @@
       <label for="title">Title</label>
       <input type="text" v-model="localDoc.title" placeholder="Title" required />
       <label for="doc-type">Document type</label>
+      
       <select v-model="localDoc.type" id="doc-type" :disabled="!!localDoc._id">
         <option value="text">Plain Text</option>
         <option value="code">JavaScript Code</option>
       </select>
+      
       <CodeEditor v-model="localDoc.content" :mode="localDoc.type" />
     </form>
   </div>
