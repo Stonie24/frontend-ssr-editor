@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onUnmounted } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 
@@ -10,20 +10,30 @@ const emit = defineEmits(["save"]);
 
 const localDoc = ref({ title: "", content: "" });
 
+// Yjs document and shared text
 let ydoc = null;
 let ytext = null;
+
+// Track the docId we're currently editing
 let currentDocId = null;
 
 // ---------------------------
-// Server save request
+// Listen for save requests from server (save-on-join)
 // ---------------------------
 socket.on("requestSave", async ({ docId }) => {
-  if (docId === currentDocId && ytext) {
+  if (docId === currentDocId) {
+    console.log("Server requested save before new user joins.");
+
+    const updatedDoc = {
+      ...localDoc.value,
+      content: ytext ? ytext.toString() : localDoc.value.content,
+    };
+
     try {
       await fetch(`/api/docs/${docId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...localDoc.value, content: ytext.toString() }),
+        body: JSON.stringify(updatedDoc),
       });
       console.log("Document saved successfully.");
     } catch (err) {
@@ -33,40 +43,59 @@ socket.on("requestSave", async ({ docId }) => {
 });
 
 // ---------------------------
-// Join document
+// Watch for doc prop changes
 // ---------------------------
-if (props.doc && props.doc._id) {
-  currentDocId = props.doc._id;
-  localDoc.value = { ...props.doc };
-  socket.emit("joinDoc", currentDocId);
-}
+watch(
+  () => props.doc,
+  (v) => {
+    if (ydoc) {
+      ydoc.destroy();
+      ydoc = null;
+      ytext = null;
+    }
+
+    localDoc.value = v ? { ...v } : { title: "", content: "" };
+
+    if (v && v._id) {
+      currentDocId = v._id;
+      socket.emit("joinDoc", currentDocId);
+    }
+  },
+  { immediate: true }
+);
 
 // ---------------------------
-// Init document from server
+// Handle initial document state from server
 // ---------------------------
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
+
+  console.log("Received initial document state for", docId);
 
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
 
-    // Sync Yjs → localDoc
+    // Observe Yjs changes and update Vue reactive state
     ytext.observe(() => {
-      localDoc.value.content = ytext.toString();
+      const newContent = ytext.toString();
+      if (localDoc.value.content !== newContent) {
+        localDoc.value.content = newContent;
+      }
     });
 
-    // Broadcast updates
+    // Emit local changes to server
     ydoc.on("update", (update) => {
-      socket.emit("docChange", { docId: currentDocId, update: Array.from(update) });
+      socket.emit("docChange", { docId: currentDocId, update });
     });
   }
 
+  // Apply incoming update (merge with Yjs state)
   Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
 // ---------------------------
-// Receive updates from other users
+// Receive incremental updates from other users
 // ---------------------------
 socket.on("docUpdate", ({ docId, update }) => {
   if (docId === currentDocId && ydoc) {
@@ -75,34 +104,34 @@ socket.on("docUpdate", ({ docId, update }) => {
 });
 
 // ---------------------------
-// Handle textarea input
+// Handle user input without triggering duplication
 // ---------------------------
-function onInput(e) {
-  if (!ytext) return;
-  const val = e.target.value;
-  ytext.delete(0, ytext.length);
-  ytext.insert(0, val);
-}
+const onInput = (e) => {
+  if (ytext) {
+    // Replace full content safely on user input
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, e.target.value);
+  }
+};
 
 // ---------------------------
-// Manual save
+// Save button logic (manual save)
 // ---------------------------
-function submit() {
-  emit("save", { ...localDoc.value, updated_at: new Date().toISOString() });
-}
+const submit = () => {
+  const now = new Date().toISOString();
+  const updatedDoc = { ...localDoc.value, updated_at: now };
+  emit("save", updatedDoc);
+};
 
 // ---------------------------
-// Cleanup
+// Clean up socket listeners on unmount
 // ---------------------------
 onUnmounted(() => {
   socket.off("docUpdate");
   socket.off("initDoc");
   socket.off("requestSave");
-  if (ydoc) ydoc.destroy();
 });
 </script>
-
-
 
 <template>
   <div class="doc-form">
@@ -123,7 +152,7 @@ onUnmounted(() => {
 
       <textarea
         id="content"
-        :value="ytext?.toString()"
+        :value="localDoc.content"
         @input="onInput"
         placeholder="Content"
         required
@@ -132,6 +161,5 @@ onUnmounted(() => {
     </form>
   </div>
 </template>
-
 
 <style src="../style/docs.css" scoped></style>
