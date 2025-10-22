@@ -71,10 +71,8 @@ export function useDocuments() {
       });
       if (!response.ok) throw new Error("Failed to update document");
       const result = await response.json();
-
-      // Optional: update local documents array
-  const index = documents.value.findIndex(d => d._id === id || d.id === id);
-      if (index !== -1) documents.value[index] = result;
+      const index = documents.value.findIndex(d => d._id === id || d.id === id);
+          if (index !== -1) documents.value[index] = result;
 
       return result;
     } catch (err) {
