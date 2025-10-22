@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted } from "vue";
+import { ref, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 
@@ -14,21 +14,16 @@ let ydoc = null;
 let ytext = null;
 let currentDocId = null;
 
-// --- Prevent infinite loops ---
-let isLocalChange = false;
-let isRemoteChange = false;
-
 // ---------------------------
-// Listen for server save request
+// Server save request
 // ---------------------------
 socket.on("requestSave", async ({ docId }) => {
   if (docId === currentDocId && ytext) {
-    const updatedDoc = { ...localDoc.value, content: ytext.toString() };
     try {
       await fetch(`/api/docs/${docId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedDoc),
+        body: JSON.stringify({ ...localDoc.value, content: ytext.toString() }),
       });
       console.log("Document saved successfully.");
     } catch (err) {
@@ -38,51 +33,30 @@ socket.on("requestSave", async ({ docId }) => {
 });
 
 // ---------------------------
-// Watch for prop doc changes
+// Join document
 // ---------------------------
-watch(
-  () => props.doc,
-  (v) => {
-    if (ydoc) {
-      ydoc.destroy();
-      ydoc = null;
-      ytext = null;
-    }
-
-    localDoc.value = v ? { ...v } : { title: "", content: "" };
-
-    if (v && v._id) {
-      currentDocId = v._id;
-      socket.emit("joinDoc", currentDocId);
-    }
-  },
-  { immediate: true }
-);
+if (props.doc && props.doc._id) {
+  currentDocId = props.doc._id;
+  localDoc.value = { ...props.doc };
+  socket.emit("joinDoc", currentDocId);
+}
 
 // ---------------------------
-// Init from server
+// Init document from server
 // ---------------------------
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
-
-  console.log("Received initial document state for", docId);
 
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
 
-    // Listen to Yjs changes → update Vue
+    // Sync Yjs → localDoc
     ytext.observe(() => {
-      if (isLocalChange) return; // don't react to our own typing
-      isRemoteChange = true;
-      const newText = ytext.toString();
-      if (localDoc.value.content !== newText) {
-        localDoc.value.content = newText;
-      }
-      isRemoteChange = false;
+      localDoc.value.content = ytext.toString();
     });
 
-    // Listen to updates from Yjs → broadcast to others
+    // Broadcast updates
     ydoc.on("update", (update) => {
       socket.emit("docChange", { docId: currentDocId, update: Array.from(update) });
     });
@@ -92,7 +66,7 @@ socket.on("initDoc", ({ docId, update }) => {
 });
 
 // ---------------------------
-// Receive incremental updates
+// Receive updates from other users
 // ---------------------------
 socket.on("docUpdate", ({ docId, update }) => {
   if (docId === currentDocId && ydoc) {
@@ -101,30 +75,21 @@ socket.on("docUpdate", ({ docId, update }) => {
 });
 
 // ---------------------------
-// Watch Vue → update Yjs
+// Handle textarea input
 // ---------------------------
-watch(
-  () => localDoc.value.content,
-  (newVal) => {
-    if (isRemoteChange || !ytext) return;
-    const current = ytext.toString();
-    if (newVal !== current) {
-      isLocalChange = true;
-      ytext.delete(0, ytext.length);
-      ytext.insert(0, newVal);
-      isLocalChange = false;
-    }
-  }
-);
+function onInput(e) {
+  if (!ytext) return;
+  const val = e.target.value;
+  ytext.delete(0, ytext.length);
+  ytext.insert(0, val);
+}
 
 // ---------------------------
-// Save button logic
+// Manual save
 // ---------------------------
-const submit = () => {
-  const now = new Date().toISOString();
-  const updatedDoc = { ...localDoc.value, updated_at: now };
-  emit("save", updatedDoc);
-};
+function submit() {
+  emit("save", { ...localDoc.value, updated_at: new Date().toISOString() });
+}
 
 // ---------------------------
 // Cleanup
@@ -136,6 +101,7 @@ onUnmounted(() => {
   if (ydoc) ydoc.destroy();
 });
 </script>
+
 
 
 <template>
@@ -157,7 +123,8 @@ onUnmounted(() => {
 
       <textarea
         id="content"
-        v-model="localDoc.content"
+        :value="ytext?.toString()"
+        @input="onInput"
         placeholder="Content"
         required
         class="document-body"
@@ -165,5 +132,6 @@ onUnmounted(() => {
     </form>
   </div>
 </template>
+
 
 <style src="../style/docs.css" scoped></style>
