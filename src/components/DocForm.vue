@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import {
@@ -22,6 +22,7 @@ let ydoc = null;
 let ytext = null;
 let awareness = null;
 let currentDocId = null;
+let isApplyingLocal = false;
 
 // ✅ 3. Persistent user identity across docs
 const username =
@@ -67,7 +68,7 @@ socket.on("initDoc", ({ docId, update }) => {
 });
 
 // ✅ setup Yjs and awareness properly
-function setupYjs(initialUpdate) {
+async function setupYjs(initialUpdate) {
   if (ydoc) return; // prevent double init
   ydoc = new Y.Doc();
   ytext = ydoc.getText("content");
@@ -113,46 +114,81 @@ function setupYjs(initialUpdate) {
   }
 
   // --- Sync textarea ---
+  // wait for DOM refs to be available (setupYjs may be called from socket events before mount)
+  await nextTick();
   const textarea = contentRef.value;
   if (!textarea) return;
 
-  // Observe Yjs text updates
+  // initialize textarea with current ytext
+  textarea.value = ytext.toString();
+
+  // Observe remote/other updates and apply them to the DOM (skip our own local edits)
   ytext.observe(() => {
+    if (isApplyingLocal) return;
     const newValue = ytext.toString();
     if (textarea.value !== newValue) {
+      const selStart = textarea.selectionStart;
+      const selEnd = textarea.selectionEnd;
       textarea.value = newValue;
+      // try to preserve caret/selection — best-effort
+      textarea.setSelectionRange(selStart, selEnd);
     }
   });
 
-  // Local input → Yjs
+  // Local input → apply minimal diff to Yjs (avoids clobbering selection)
   const handleInput = (e) => {
-    const newValue = e.target.value;
-    const oldValue = ytext.toString();
-    if (newValue === oldValue) return;
-    ytext.delete(0, oldValue.length);
-    ytext.insert(0, newValue);
+    const value = e.target.value;
+    const current = ytext.toString();
+    if (value === current) return;
+
+    // find first differing index
+    let start = 0;
+    const curLen = current.length;
+    const valLen = value.length;
+    while (start < curLen && start < valLen && current[start] === value[start]) {
+      start++;
+    }
+
+    // find last matching suffix
+    let curSuffix = curLen - 1;
+    let valSuffix = valLen - 1;
+    while (curSuffix >= start && valSuffix >= start && current[curSuffix] === value[valSuffix]) {
+      curSuffix--;
+      valSuffix--;
+    }
+
+    const deleteLen = Math.max(0, curSuffix - start + 1);
+    const insertText = value.slice(start, valLen - (valLen - 1 - valSuffix) - 0);
+
+    // apply as a local transaction so observers can ignore it
+    isApplyingLocal = true;
+    ydoc.transact(() => {
+      if (deleteLen > 0) ytext.delete(start, deleteLen);
+      if (insertText.length > 0) ytext.insert(start, insertText);
+    }, "local");
+    isApplyingLocal = false;
   };
   textarea.addEventListener("input", handleInput);
 
-  // Cursor tracking
-  const updateCursor = () => {
-    if (!awareness) return;
-    awareness.setLocalStateField("cursor", {
-      start: textarea.selectionStart,
-      end: textarea.selectionEnd,
-    });
-  };
-  textarea.addEventListener("select", updateCursor);
-  textarea.addEventListener("keyup", updateCursor);
-  textarea.addEventListener("click", updateCursor);
+   // Cursor tracking
+   const updateCursor = () => {
+     if (!awareness) return;
+     awareness.setLocalStateField("cursor", {
+       start: textarea.selectionStart,
+       end: textarea.selectionEnd,
+     });
+   };
+   textarea.addEventListener("select", updateCursor);
+   textarea.addEventListener("keyup", updateCursor);
+   textarea.addEventListener("click", updateCursor);
 
-  // ✅ Cleanup when switching/unmounting
-  ydoc._cleanup = () => {
-    textarea.removeEventListener("input", handleInput);
-    textarea.removeEventListener("select", updateCursor);
-    textarea.removeEventListener("keyup", updateCursor);
-    textarea.removeEventListener("click", updateCursor);
-  };
+   // ✅ Cleanup when switching/unmounting
+   ydoc._cleanup = () => {
+     textarea.removeEventListener("input", handleInput);
+     textarea.removeEventListener("select", updateCursor);
+     textarea.removeEventListener("keyup", updateCursor);
+     textarea.removeEventListener("click", updateCursor);
+   };
 }
 
 // --- Render cursors in overlay container ---
@@ -195,7 +231,9 @@ function renderCursors() {
 // --- Save document ---
 function submit() {
   const now = new Date().toISOString();
-  const updatedDoc = { ...localDoc.value, updated_at: now };
+  // make sure we save current Yjs content (ytext) rather than stale localDoc.content
+  const content = ytext ? ytext.toString() : localDoc.value.content;
+  const updatedDoc = { ...localDoc.value, content, updated_at: now };
   emit("save", updatedDoc);
 }
 
