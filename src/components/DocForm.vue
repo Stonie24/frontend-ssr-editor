@@ -77,15 +77,17 @@ socket.on("initDoc", ({ docId, update }) => {
 
     // --- BIND TEXTAREA TO Yjs ---
     const textarea = document.getElementById("content");
+    let isApplyingLocal = false;
 
     // Update textarea when Yjs changes
-    ytext.observe((event, transaction) => {
-      // Ignore updates that we originated locally so we don't clobber caret
-      if (transaction && transaction.origin === "local") return;
-      if (textarea.value !== ytext.toString()) {
+    ytext.observe(() => {
+      // skip updates caused by our own local transaction application
+      if (isApplyingLocal) return;
+      const newText = ytext.toString();
+      if (textarea.value !== newText) {
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
-        textarea.value = ytext.toString();
+        textarea.value = newText;
         textarea.setSelectionRange(start, end); // preserve cursor
       }
     });
@@ -94,13 +96,44 @@ socket.on("initDoc", ({ docId, update }) => {
     textarea.addEventListener("input", () => {
       const current = ytext.toString();
       const value = textarea.value;
-      if (current !== value) {
-        // Mark this transaction as local so observer won't reset the caret
-        ydoc.transact(() => {
-          ytext.delete(0, current.length);
-          ytext.insert(0, value);
-        }, "local");
+      if (current === value) return;
+
+      // Compute minimal edit (first/last diff) to avoid clobbering caret
+      let start = 0;
+      const curLen = current.length;
+      const valLen = value.length;
+      while (start < curLen && start < valLen && current[start] === value[start]) {
+        start++;
       }
+
+      // If everything after start is equal, simple replacement of suffix handles it
+      let curSuffix = curLen - 1;
+      let valSuffix = valLen - 1;
+      while (curSuffix >= start && valSuffix >= start && current[curSuffix] === value[valSuffix]) {
+        curSuffix--;
+        valSuffix--;
+      }
+
+      const deleteLen = Math.max(0, curSuffix - start + 1);
+      const insertText = value.slice(start, valLen - (valLen - 1 - valSuffix) - 0);
+
+      // Preserve selection relative to the edit
+      const selStart = textarea.selectionStart;
+      const selEnd = textarea.selectionEnd;
+
+      // Apply minimal edit as a local transaction to Yjs
+      isApplyingLocal = true;
+      ydoc.transact(() => {
+        if (deleteLen > 0) ytext.delete(start, deleteLen);
+        if (insertText.length > 0) ytext.insert(start, insertText);
+      }, "local");
+      isApplyingLocal = false;
+
+      // Update selection to account for the edit delta
+      const delta = insertText.length - deleteLen;
+      const newSelStart = selStart > start ? Math.max(start, selStart + delta) : selStart;
+      const newSelEnd = selEnd > start ? Math.max(start, selEnd + delta) : selEnd;
+      textarea.setSelectionRange(newSelStart, newSelEnd);
     });
 
     // Track cursor position in awareness
