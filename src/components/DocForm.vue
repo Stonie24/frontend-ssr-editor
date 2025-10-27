@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
-import { Awareness } from "y-protocols/awareness.js";
+import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
 
 const socket = io("https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/");
 
@@ -58,20 +58,21 @@ socket.on("initDoc", ({ docId, update }) => {
 
     // Listen for awareness updates from server
     socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
-      if (incomingId === currentDocId) {
-        awareness.applyUpdate(new Uint8Array(update));
-      }
-    });
+    if (incomingId === currentDocId) {
+      applyAwarenessUpdate(awareness, new Uint8Array(update));
+    }
+  });
 
     // Forward awareness updates to others
     awareness.on("update", ({ added, updated, removed }) => {
-      const update = Awareness.encodeUpdate(
-        awareness,
-        added.concat(updated).concat(removed)
-      );
-      socket.emit("awarenessUpdate", { docId: currentDocId, update });
-      renderCursors(); // update cursor display
-    });
+    const update = encodeAwarenessUpdate(
+      awareness,
+      added.concat(updated).concat(removed)
+    );
+    socket.emit("awarenessUpdate", { docId: currentDocId, update });
+    renderCursors();
+  });
+
 
     // Sync document content
     ydoc.on("update", (update) => {
