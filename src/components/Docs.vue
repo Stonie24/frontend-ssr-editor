@@ -54,9 +54,7 @@ const saveDoc = async (doc) => {
         @save="saveDoc"
       />
 
-      <div v-else class="placeholder">
-        <p>Select a document to start editing.</p>
-      </div>
+    <div v-else class="placeholder"></div>
     </div>
 
     <div v-else>
