@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness.js";
@@ -11,16 +11,13 @@ const emit = defineEmits(["save"]);
 
 const localDoc = ref({ title: "", content: "" });
 
-// Yjs document and shared text
+// Yjs doc, text, and awareness
 let ydoc = null;
 let ytext = null;
-
-// Track the docId we're currently editing
+let awareness = null;
 let currentDocId = null;
 
-// ---------------------------
-// Watch for doc prop changes
-// ---------------------------
+// --- Watch document prop changes ---
 watch(
   () => props.doc,
   (v) => {
@@ -28,6 +25,7 @@ watch(
       ydoc.destroy();
       ydoc = null;
       ytext = null;
+      awareness = null;
     }
 
     localDoc.value = v ? { ...v } : { title: "", content: "" };
@@ -40,65 +38,67 @@ watch(
   { immediate: true }
 );
 
-
-// ---------------------------
-// Handle initial document state from server
-// ---------------------------
+// --- Setup document sync ---
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
 
   console.log("Received initDoc for", docId);
 
-  // Create Yjs document once
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
+    awareness = new Awareness(ydoc);
 
-    // --- Setup awareness (user cursors) ---
-    const awareness = new Awareness(ydoc);
-
-    // identify this client
+    // Identify this client
     const userColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
     const username = "User-" + Math.floor(Math.random() * 1000);
 
-    // store cursor + user info in local state
+    // Store local user state
     awareness.setLocalStateField("user", { name: username, color: userColor });
 
-    // listen for awareness updates from server
+    // Listen for awareness updates from server
     socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
       if (incomingId === currentDocId) {
         awareness.applyUpdate(new Uint8Array(update));
       }
     });
 
-    // --- Send local changes to server ---
+    // Forward awareness updates to others
+    awareness.on("update", ({ added, updated, removed }) => {
+      const update = Awareness.encodeUpdate(
+        awareness,
+        added.concat(updated).concat(removed)
+      );
+      socket.emit("awarenessUpdate", { docId: currentDocId, update });
+      renderCursors(); // update cursor display
+    });
+
+    // Sync document content
     ydoc.on("update", (update) => {
       socket.emit("docChange", { docId: currentDocId, update });
     });
 
-    // --- Receive remote updates ---
     socket.on("docUpdate", ({ docId: incomingId, update }) => {
       if (incomingId === currentDocId) {
         Y.applyUpdate(ydoc, new Uint8Array(update));
       }
     });
 
-    // --- Update the textarea on remote changes ---
+    // Sync local <textarea> with shared Y.Text
+    const textarea = document.getElementById("content");
+
     ytext.observe(() => {
       const newValue = ytext.toString();
-      const textarea = document.getElementById("content");
       if (textarea && textarea.value !== newValue) {
         textarea.value = newValue;
       }
     });
 
-    // --- Listen to local user input ---
-    const textarea = document.getElementById("content");
     textarea.addEventListener("input", (e) => {
       const newValue = e.target.value;
       const oldValue = ytext.toString();
 
-      // Minimal diff: find first and last differing index
+      // minimal diff update
       let start = 0;
       while (start < newValue.length && newValue[start] === oldValue[start]) start++;
 
@@ -113,49 +113,39 @@ socket.on("initDoc", ({ docId, update }) => {
         newEnd--;
       }
 
-      // Replace only changed portion
       ytext.delete(start, oldEnd - start + 1);
       ytext.insert(start, newValue.slice(start, newEnd + 1));
     });
+
+    // Cursor tracking
+    const updateCursor = () => {
+      if (!awareness) return;
+      awareness.setLocalStateField("cursor", {
+        start: textarea.selectionStart,
+        end: textarea.selectionEnd,
+      });
+    };
+
+    textarea.addEventListener("select", updateCursor);
+    textarea.addEventListener("keyup", updateCursor);
+    textarea.addEventListener("click", updateCursor);
   }
 
-  // Apply initial state from server after event listeners exist
   Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
-// ---------------------------
-// Receive incremental updates from other users
-// ---------------------------
-socket.on("docUpdate", ({ docId, update }) => {
-  if (docId === currentDocId && ydoc) {
-    Y.applyUpdate(ydoc, new Uint8Array(update));
-  }
-});
+// --- Render remote cursors ---
+function renderCursors() {
+  if (!awareness) return;
 
+  const textarea = document.getElementById("content");
+  if (!textarea) return;
 
-// ---------------------------
-// Look for inputs to help track users (edit awareness)
-// ---------------------------
-const textarea = document.getElementById("content");
-textarea.addEventListener("select", updateCursor);
-textarea.addEventListener("keyup", updateCursor);
-textarea.addEventListener("click", updateCursor);
-
-function updateCursor() {
-  if (ydoc) {
-    awareness.setLocalStateField("cursor", {
-        start: textarea.selectionStart,
-        end: textarea.selectionEnd,
-    });
-  }
-}
-
-const renderCursors = () => {
   const others = Array.from(awareness.getStates().values()).filter(
     (s) => s.user && s.cursor
   );
 
-  // Remove old cursor highlights
+  // Remove old cursors
   document.querySelectorAll(".remote-cursor").forEach((el) => el.remove());
 
   others.forEach((s) => {
@@ -169,7 +159,6 @@ const renderCursors = () => {
     const line = lines.length - 1;
     const column = lines[lines.length - 1].length;
 
-    // Create a floating cursor indicator (simple demo)
     const cursorEl = document.createElement("div");
     cursorEl.className = "remote-cursor";
     cursorEl.textContent = `| ${name}`;
@@ -179,27 +168,21 @@ const renderCursors = () => {
     cursorEl.style.top = `${20 * line}px`;
     textarea.parentElement.appendChild(cursorEl);
   });
-};
+}
 
-awareness.on("update", renderCursors);
-
-
-// ---------------------------
-// Save button logic (manual save)
-// ---------------------------
+// --- Save button ---
 const submit = () => {
   const now = new Date().toISOString();
   const updatedDoc = { ...localDoc.value, updated_at: now };
   emit("save", updatedDoc);
 };
 
-// ---------------------------
-// Clean up socket listeners on unmount
-// ---------------------------
+// --- Cleanup ---
 onUnmounted(() => {
   socket.off("docUpdate");
   socket.off("initDoc");
-  socket.off("requestSave");
+  socket.off("awarenessUpdate");
+  if (ydoc) ydoc.destroy();
 });
 </script>
 
@@ -209,21 +192,26 @@ onUnmounted(() => {
     <form @submit.prevent="submit" class="new-doc">
       <div id="doc-header">
         <label for="title"><h3>Title</h3></label>
-        <input
-          id="title"
-          v-model="localDoc.title"
-          placeholder="Title"
-          required
-        />
-        <button type="submit">
-          {{ localDoc._id ? "Save" : "Create" }}
-        </button>
+        <input id="title" v-model="localDoc.title" placeholder="Title" required />
+        <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
       </div>
 
-      <textarea id="content" placeholder="Content" required class="document-body"></textarea>
-
+      <div style="position: relative;">
+        <textarea
+          id="content"
+          placeholder="Content"
+          required
+          class="document-body"
+        ></textarea>
+      </div>
     </form>
   </div>
 </template>
 
-<style src="../style/docs.css" scoped></style>
+<style scoped>
+.remote-cursor {
+  pointer-events: none;
+  font-size: 12px;
+  opacity: 0.8;
+}
+</style>
