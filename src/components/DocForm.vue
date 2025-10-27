@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch, onUnmounted } from "vue";
+import { ref, watch, onUnmounted, onMounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
+import { TextareaBinding } from "y-textarea";
 
 const socket = io("https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/");
 
@@ -14,6 +15,7 @@ const localDoc = ref({ title: "", content: "" });
 let ydoc = null;
 let ytext = null;
 let awareness = null;
+let binding = null;
 let currentDocId = null;
 
 watch(
@@ -24,6 +26,7 @@ watch(
       ydoc = null;
       ytext = null;
       awareness = null;
+      binding = null;
     }
 
     localDoc.value = v ? { ...v } : { title: "", content: "" };
@@ -44,7 +47,7 @@ socket.on("initDoc", ({ docId, update }) => {
     ytext = ydoc.getText("content");
     awareness = new Awareness(ydoc);
 
-    // Local user info
+    // Setup local user
     const userColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
     const username = "User-" + Math.floor(Math.random() * 1000);
     awareness.setLocalStateField("user", { name: username, color: userColor });
@@ -75,42 +78,12 @@ socket.on("initDoc", ({ docId, update }) => {
       }
     });
 
-    // --- BIND TEXTAREA TO Yjs ---
+    // --- Y-Textarea binding ---
     const textarea = document.getElementById("content");
-
-    // Update textarea when Yjs changes
-    ytext.observe(() => {
-      if (textarea.value !== ytext.toString()) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        textarea.value = ytext.toString();
-        textarea.setSelectionRange(start, end); // preserve cursor
-      }
-    });
-
-    // Update Yjs when user types
-    textarea.addEventListener("input", () => {
-      const current = ytext.toString();
-      const value = textarea.value;
-      if (current !== value) {
-        // Let Yjs handle merges automatically
-        ytext.delete(0, current.length);
-        ytext.insert(0, value);
-      }
-    });
-
-    // Track cursor position in awareness
-    const updateCursor = () => {
-      awareness.setLocalStateField("cursor", {
-        start: textarea.selectionStart,
-        end: textarea.selectionEnd,
-      });
-    };
-
-    ["select", "keyup", "click"].forEach(evt => textarea.addEventListener(evt, updateCursor));
+    binding = new TextareaBinding(ytext, textarea, awareness);
   }
 
-  // Apply initial state
+  // Apply initial Yjs state
   Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
