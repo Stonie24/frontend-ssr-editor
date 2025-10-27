@@ -70,28 +70,22 @@ watch(
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
 
-  console.log("Received initial document state for", docId);
-
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
 
-    // Observe Yjs changes and update Vue reactive state
-    ytext.observe(() => {
-      const newContent = ytext.toString();
-      if (localDoc.value.content !== newContent) {
-        localDoc.value.content = newContent;
-      }
-    });
+    // Apply initial update from server
+    Y.applyUpdate(ydoc, new Uint8Array(update));
 
-    // Emit local changes to server
+    // Bind textarea to Yjs text
+    const textarea = document.getElementById("content");
+    bindTextarea(ytext, textarea);
+
+    // Send local updates to server
     ydoc.on("update", (update) => {
       socket.emit("docChange", { docId: currentDocId, update });
     });
   }
-
-  // Apply incoming update (merge with Yjs state)
-  Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
 // ---------------------------
@@ -103,16 +97,7 @@ socket.on("docUpdate", ({ docId, update }) => {
   }
 });
 
-// ---------------------------
-// Handle user input without triggering duplication
-// ---------------------------
-const onInput = (e) => {
-  if (ytext) {
-    // Replace full content safely on user input
-    ytext.delete(0, ytext.length);
-    ytext.insert(0, e.target.value);
-  }
-};
+
 
 // ---------------------------
 // Save button logic (manual save)
@@ -150,14 +135,8 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <textarea
-        id="content"
-        :value="localDoc.content"
-        @input="onInput"
-        placeholder="Content"
-        required
-        class="document-body"
-      ></textarea>
+      <textarea id="content" placeholder="Content" required class="document-body"></textarea>
+
     </form>
   </div>
 </template>
