@@ -54,6 +54,11 @@ h1 {
   text-align: center;
 }
 
+.remote-cursor {
+  pointer-events: none;
+  font-size: 12px;
+  opacity: 0.8;
+}
 
 @media (prefers-color-scheme: light) {
   :root {

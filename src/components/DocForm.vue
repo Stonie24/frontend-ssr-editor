@@ -192,26 +192,21 @@ onUnmounted(() => {
     <form @submit.prevent="submit" class="new-doc">
       <div id="doc-header">
         <label for="title"><h3>Title</h3></label>
-        <input id="title" v-model="localDoc.title" placeholder="Title" required />
-        <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
+        <input
+          id="title"
+          v-model="localDoc.title"
+          placeholder="Title"
+          required
+        />
+        <button type="submit">
+          {{ localDoc._id ? "Save" : "Create" }}
+        </button>
       </div>
 
-      <div style="position: relative;">
-        <textarea
-          id="content"
-          placeholder="Content"
-          required
-          class="document-body"
-        ></textarea>
-      </div>
+      <textarea id="content" placeholder="Content" required class="document-body"></textarea>
+
     </form>
   </div>
 </template>
 
-<style scoped>
-.remote-cursor {
-  pointer-events: none;
-  font-size: 12px;
-  opacity: 0.8;
-}
-</style>
+<style src="../style/docs.css" scoped></style>
