@@ -18,31 +18,6 @@ let ytext = null;
 let currentDocId = null;
 
 // ---------------------------
-// Listen for save requests from server (save-on-join)
-// ---------------------------
-socket.on("requestSave", async ({ docId }) => {
-  if (docId === currentDocId) {
-    console.log("Server requested save before new user joins.");
-
-    const updatedDoc = {
-      ...localDoc.value,
-      content: ytext ? ytext.toString() : localDoc.value.content,
-    };
-
-    try {
-      await fetch(`/api/docs/${docId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedDoc),
-      });
-      console.log("Document saved successfully.");
-    } catch (err) {
-      console.error("Failed to save document:", err);
-    }
-  }
-});
-
-// ---------------------------
 // Watch for doc prop changes
 // ---------------------------
 watch(
@@ -70,22 +45,63 @@ watch(
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
 
+  console.log("Received initDoc for", docId);
+
+  // Create Yjs document once
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
 
-    // Apply initial update from server
-    Y.applyUpdate(ydoc, new Uint8Array(update));
-
-    // Bind textarea to Yjs text
-    const textarea = document.getElementById("content");
-    bindTextarea(ytext, textarea);
-
-    // Send local updates to server
+    // --- Send local changes to server ---
     ydoc.on("update", (update) => {
       socket.emit("docChange", { docId: currentDocId, update });
     });
+
+    // --- Receive remote updates ---
+    socket.on("docUpdate", ({ docId: incomingId, update }) => {
+      if (incomingId === currentDocId) {
+        Y.applyUpdate(ydoc, new Uint8Array(update));
+      }
+    });
+
+    // --- Update the textarea on remote changes ---
+    ytext.observe(() => {
+      const newValue = ytext.toString();
+      const textarea = document.getElementById("content");
+      if (textarea && textarea.value !== newValue) {
+        textarea.value = newValue;
+      }
+    });
+
+    // --- Listen to local user input ---
+    const textarea = document.getElementById("content");
+    textarea.addEventListener("input", (e) => {
+      const newValue = e.target.value;
+      const oldValue = ytext.toString();
+
+      // Minimal diff: find first and last differing index
+      let start = 0;
+      while (start < newValue.length && newValue[start] === oldValue[start]) start++;
+
+      let oldEnd = oldValue.length - 1;
+      let newEnd = newValue.length - 1;
+      while (
+        oldEnd >= start &&
+        newEnd >= start &&
+        oldValue[oldEnd] === newValue[newEnd]
+      ) {
+        oldEnd--;
+        newEnd--;
+      }
+
+      // Replace only changed portion
+      ytext.delete(start, oldEnd - start + 1);
+      ytext.insert(start, newValue.slice(start, newEnd + 1));
+    });
   }
+
+  // Apply initial state from server after event listeners exist
+  Y.applyUpdate(ydoc, new Uint8Array(update));
 });
 
 // ---------------------------
