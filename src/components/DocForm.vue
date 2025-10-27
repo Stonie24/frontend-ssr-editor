@@ -136,56 +136,39 @@ async function setupYjs(initialUpdate) {
 
   // Observe remote/other updates and apply them to the DOM (skip our own local edits)
   ytext.observe((event) => {
-    // event.delta contains operations describing the change (retain/insert/delete)
-    if (isApplyingLocal) return;
+  if (isApplyingLocal) return;
 
-    // Transform cached remote cursor positions according to the delta ops
-    let index = 0;
-    if (event.delta && awareness) {
-      for (const op of event.delta) {
-        if (op.retain) {
-          index += op.retain;
-        } else if (op.insert) {
-          const len = op.insert.length;
-          for (const [clientId, state] of awareness.getStates()) {
-            if (clientId === awareness.clientID) continue;
-            if (!state || !state.cursor) continue;
-            const s = state.cursor.start ?? 0;
-            const e = state.cursor.end ?? s;
-            if (s >= index) state.cursor.start = s + len;
-            if (e >= index) state.cursor.end = e + len;
-          }
-          index += len;
-        } else if (op.delete) {
-          const del = op.delete;
-          for (const [clientId, state] of awareness.getStates()) {
-            if (clientId === awareness.clientID) continue;
-            if (!state || !state.cursor) continue;
-            const s = state.cursor.start ?? 0;
-            const e = state.cursor.end ?? s;
-            // start
-            if (s >= index + del) state.cursor.start = s - del;
-            else if (s >= index) state.cursor.start = index;
-            // end
-            if (e >= index + del) state.cursor.end = e - del;
-            else if (e >= index) state.cursor.end = index;
-          }
-          // deleted text does not advance index
-        }
-      }
-      // Update rendered cursors immediately so UI reflects transformed positions
-      renderCursors();
-    }
+  const textarea = contentRef.value;
+  const oldSelStart = textarea.selectionStart;
+  const oldSelEnd = textarea.selectionEnd;
 
-    // Now update textarea DOM with new content, preserving selection if possible
-    const newValue = ytext.toString();
-    if (textarea.value !== newValue) {
-      const selStart = textarea.selectionStart;
-      const selEnd = textarea.selectionEnd;
-      textarea.value = newValue;
-      textarea.setSelectionRange(selStart, selEnd);
+  // compute new textarea value
+  const newValue = ytext.toString();
+  textarea.value = newValue;
+
+  // transform selection
+  let selStart = oldSelStart;
+  let selEnd = oldSelEnd;
+
+  // Adjust selection for each change in the event
+  event.delta.forEach((op) => {
+    if (op.retain !== undefined) {
+      // nothing to do here
+    } else if (op.insert) {
+      if (op.retainPos !== undefined && op.retainPos <= selStart) selStart += op.insert.length;
+      if (op.retainPos !== undefined && op.retainPos <= selEnd) selEnd += op.insert.length;
+    } else if (op.delete) {
+      if (op.retainPos !== undefined && op.retainPos < selStart) selStart -= Math.min(op.delete, selStart - op.retainPos);
+      if (op.retainPos !== undefined && op.retainPos < selEnd) selEnd -= Math.min(op.delete, selEnd - op.retainPos);
     }
   });
+
+  // Apply transformed selection
+  textarea.setSelectionRange(selStart, selEnd);
+
+  // re-render cursors visually
+  renderCursors();
+});
 
   // Local input → apply minimal diff to Yjs (avoids clobbering selection)
   const handleInput = (e) => {
@@ -219,30 +202,6 @@ async function setupYjs(initialUpdate) {
       if (insertText.length > 0) ytext.insert(start, insertText);
     }, "local");
     isApplyingLocal = false;
-
-    // Transform cached remote cursor positions locally so other users' carets move with this edit.
-    const delta = insertText.length - deleteLen;
-    if (delta !== 0 && awareness) {
-      for (const [clientId, state] of awareness.getStates()) {
-        if (clientId === awareness.clientID) continue;
-        if (!state || !state.cursor) continue;
-        const s = state.cursor.start ?? 0;
-        const e = state.cursor.end ?? s;
-        if (delta > 0) {
-          // insertion
-          if (s >= start) state.cursor.start = s + delta;
-          if (e >= start) state.cursor.end = e + delta;
-        } else {
-          // deletion
-          const del = -delta;
-          if (s >= start + del) state.cursor.start = s - del;
-          else if (s >= start) state.cursor.start = start;
-          if (e >= start + del) state.cursor.end = e - del;
-          else if (e >= start) state.cursor.end = start;
-        }
-      }
-      renderCursors();
-    }
   };
   textarea.addEventListener("input", handleInput);
 
