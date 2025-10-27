@@ -135,14 +135,54 @@ async function setupYjs(initialUpdate) {
   textarea.value = ytext.toString();
 
   // Observe remote/other updates and apply them to the DOM (skip our own local edits)
-  ytext.observe(() => {
+  ytext.observe((event) => {
+    // event.delta contains operations describing the change (retain/insert/delete)
     if (isApplyingLocal) return;
+
+    // Transform cached remote cursor positions according to the delta ops
+    let index = 0;
+    if (event.delta && awareness) {
+      for (const op of event.delta) {
+        if (op.retain) {
+          index += op.retain;
+        } else if (op.insert) {
+          const len = op.insert.length;
+          for (const [clientId, state] of awareness.getStates()) {
+            if (clientId === awareness.clientID) continue;
+            if (!state || !state.cursor) continue;
+            const s = state.cursor.start ?? 0;
+            const e = state.cursor.end ?? s;
+            if (s >= index) state.cursor.start = s + len;
+            if (e >= index) state.cursor.end = e + len;
+          }
+          index += len;
+        } else if (op.delete) {
+          const del = op.delete;
+          for (const [clientId, state] of awareness.getStates()) {
+            if (clientId === awareness.clientID) continue;
+            if (!state || !state.cursor) continue;
+            const s = state.cursor.start ?? 0;
+            const e = state.cursor.end ?? s;
+            // start
+            if (s >= index + del) state.cursor.start = s - del;
+            else if (s >= index) state.cursor.start = index;
+            // end
+            if (e >= index + del) state.cursor.end = e - del;
+            else if (e >= index) state.cursor.end = index;
+          }
+          // deleted text does not advance index
+        }
+      }
+      // Update rendered cursors immediately so UI reflects transformed positions
+      renderCursors();
+    }
+
+    // Now update textarea DOM with new content, preserving selection if possible
     const newValue = ytext.toString();
     if (textarea.value !== newValue) {
       const selStart = textarea.selectionStart;
       const selEnd = textarea.selectionEnd;
       textarea.value = newValue;
-      // try to preserve caret/selection — best-effort
       textarea.setSelectionRange(selStart, selEnd);
     }
   });
@@ -179,6 +219,30 @@ async function setupYjs(initialUpdate) {
       if (insertText.length > 0) ytext.insert(start, insertText);
     }, "local");
     isApplyingLocal = false;
+
+    // Transform cached remote cursor positions locally so other users' carets move with this edit.
+    const delta = insertText.length - deleteLen;
+    if (delta !== 0 && awareness) {
+      for (const [clientId, state] of awareness.getStates()) {
+        if (clientId === awareness.clientID) continue;
+        if (!state || !state.cursor) continue;
+        const s = state.cursor.start ?? 0;
+        const e = state.cursor.end ?? s;
+        if (delta > 0) {
+          // insertion
+          if (s >= start) state.cursor.start = s + delta;
+          if (e >= start) state.cursor.end = e + delta;
+        } else {
+          // deletion
+          const del = -delta;
+          if (s >= start + del) state.cursor.start = s - del;
+          else if (s >= start) state.cursor.start = start;
+          if (e >= start + del) state.cursor.end = e - del;
+          else if (e >= start) state.cursor.end = start;
+        }
+      }
+      renderCursors();
+    }
   };
   textarea.addEventListener("input", handleInput);
 
