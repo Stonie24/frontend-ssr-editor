@@ -79,7 +79,9 @@ socket.on("initDoc", ({ docId, update }) => {
     const textarea = document.getElementById("content");
 
     // Update textarea when Yjs changes
-    ytext.observe(() => {
+    ytext.observe((event, transaction) => {
+      // Ignore updates that we originated locally so we don't clobber caret
+      if (transaction && transaction.origin === "local") return;
       if (textarea.value !== ytext.toString()) {
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -93,9 +95,11 @@ socket.on("initDoc", ({ docId, update }) => {
       const current = ytext.toString();
       const value = textarea.value;
       if (current !== value) {
-        // Let Yjs handle merges automatically
-        ytext.delete(0, current.length);
-        ytext.insert(0, value);
+        // Mark this transaction as local so observer won't reset the caret
+        ydoc.transact(() => {
+          ytext.delete(0, current.length);
+          ytext.insert(0, value);
+        }, "local");
       }
     });
 
