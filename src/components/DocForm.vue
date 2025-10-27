@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, watch, onUnmounted, nextTick } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import {
@@ -7,12 +7,16 @@ import {
   encodeAwarenessUpdate,
   applyAwarenessUpdate,
 } from "y-protocols/awareness";
+import {
+  createRelativePositionFromTypeIndex,
+  createAbsolutePositionFromRelativePosition,
+} from "yjs";
 
-// ✅ 1. Props and emits
+// ✅ Props and emits
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
 
-// ✅ 2. Local reactive state
+// ✅ Local reactive state
 const localDoc = ref({ title: "", content: "" });
 const contentRef = ref(null);
 const cursorsContainer = ref(null);
@@ -24,7 +28,7 @@ let awareness = null;
 let currentDocId = null;
 let isApplyingLocal = false;
 
-// ✅ 3. Persistent user identity across docs
+// ✅ Persistent user identity
 const username =
   localStorage.getItem("username") ||
   (() => {
@@ -41,18 +45,17 @@ const userColor =
     return color;
   })();
 
-// ✅ 4. Single socket instance (per session)
+// ✅ Socket
 const socket = io(
   "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/"
 );
 
-// --- Watch for document prop changes ---
+// --- Watch document changes ---
 watch(
   () => props.doc,
   (v) => {
-    cleanupYjs(); // ✅ clean before switching doc
+    cleanupYjs();
     localDoc.value = v ? { ...v } : { title: "", content: "" };
-
     if (v && v._id) {
       currentDocId = v._id;
       socket.emit("joinDoc", currentDocId);
@@ -61,15 +64,16 @@ watch(
   { immediate: true }
 );
 
-// --- Handle server init ---
+// --- Server init ---
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
   setupYjs(update);
 });
 
-// ✅ setup Yjs and awareness properly
+// --- Setup Yjs ---
 async function setupYjs(initialUpdate) {
-  if (ydoc) return; // prevent double init
+  if (ydoc) return;
+
   ydoc = new Y.Doc();
   ytext = ydoc.getText("content");
   awareness = new Awareness(ydoc);
@@ -79,7 +83,7 @@ async function setupYjs(initialUpdate) {
     color: userColor,
   });
 
-  // --- Awareness listeners ---
+  // Awareness listeners
   socket.off("awarenessUpdate");
   socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
     if (incomingId === currentDocId) {
@@ -97,7 +101,7 @@ async function setupYjs(initialUpdate) {
     renderCursors();
   });
 
-  // --- Yjs doc update listeners ---
+  // Yjs doc update listeners
   ydoc.on("update", (update) => {
     socket.emit("docChange", { docId: currentDocId, update });
   });
@@ -113,78 +117,23 @@ async function setupYjs(initialUpdate) {
     Y.applyUpdate(ydoc, new Uint8Array(initialUpdate));
   }
 
-  // --- Sync textarea ---
-  // wait for DOM refs to be available (setupYjs may be called from socket events before mount)
   await nextTick();
-  // ensure template ref is available (socket init may fire before component mount)
-  if (!contentRef.value) {
-    // wait up to ~500ms for the ref to appear
-    for (let i = 0; i < 50 && !contentRef.value; i++) {
-      // 10ms intervals
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 10));
-    }
-  }
   const textarea = contentRef.value;
-  if (!textarea) {
-    console.warn("DocForm: contentRef not available — cannot bind textarea");
-    return;
-  }
+  if (!textarea) return;
 
-  // initialize textarea with current ytext
   textarea.value = ytext.toString();
 
-  // Observe remote/other updates and apply them to the DOM (skip our own local edits)
-  ytext.observe((event) => {
-  if (isApplyingLocal) return;
-
-  const textarea = contentRef.value;
-  const oldSelStart = textarea.selectionStart;
-  const oldSelEnd = textarea.selectionEnd;
-
-  // compute new textarea value
-  const newValue = ytext.toString();
-  textarea.value = newValue;
-
-  // transform selection
-  let selStart = oldSelStart;
-  let selEnd = oldSelEnd;
-
-  // Adjust selection for each change in the event
-  event.delta.forEach((op) => {
-    if (op.retain !== undefined) {
-      // nothing to do here
-    } else if (op.insert) {
-      if (op.retainPos !== undefined && op.retainPos <= selStart) selStart += op.insert.length;
-      if (op.retainPos !== undefined && op.retainPos <= selEnd) selEnd += op.insert.length;
-    } else if (op.delete) {
-      if (op.retainPos !== undefined && op.retainPos < selStart) selStart -= Math.min(op.delete, selStart - op.retainPos);
-      if (op.retainPos !== undefined && op.retainPos < selEnd) selEnd -= Math.min(op.delete, selEnd - op.retainPos);
-    }
-  });
-
-  // Apply transformed selection
-  textarea.setSelectionRange(selStart, selEnd);
-
-  // re-render cursors visually
-  renderCursors();
-});
-
-  // Local input → apply minimal diff to Yjs (avoids clobbering selection)
+  // --- Local input → Yjs ---
   const handleInput = (e) => {
     const value = e.target.value;
     const current = ytext.toString();
     if (value === current) return;
 
-    // find first differing index
     let start = 0;
     const curLen = current.length;
     const valLen = value.length;
-    while (start < curLen && start < valLen && current[start] === value[start]) {
-      start++;
-    }
+    while (start < curLen && start < valLen && current[start] === value[start]) start++;
 
-    // find last matching suffix
     let curSuffix = curLen - 1;
     let valSuffix = valLen - 1;
     while (curSuffix >= start && valSuffix >= start && current[curSuffix] === value[valSuffix]) {
@@ -195,7 +144,6 @@ async function setupYjs(initialUpdate) {
     const deleteLen = Math.max(0, curSuffix - start + 1);
     const insertText = value.slice(start, valLen - (valLen - 1 - valSuffix) - 0);
 
-    // apply as a local transaction so observers can ignore it
     isApplyingLocal = true;
     ydoc.transact(() => {
       if (deleteLen > 0) ytext.delete(start, deleteLen);
@@ -205,74 +153,91 @@ async function setupYjs(initialUpdate) {
   };
   textarea.addEventListener("input", handleInput);
 
-   // Cursor tracking
-   const updateCursor = () => {
-     if (!awareness) return;
-     awareness.setLocalStateField("cursor", {
-       start: textarea.selectionStart,
-       end: textarea.selectionEnd,
-     });
-   };
-   textarea.addEventListener("select", updateCursor);
-   textarea.addEventListener("keyup", updateCursor);
-   textarea.addEventListener("click", updateCursor);
+  // --- Cursor tracking with relative positions ---
+  const updateCursor = () => {
+    if (!awareness || !ytext || !textarea) return;
+    awareness.setLocalStateField("cursor", {
+      relStart: createRelativePositionFromTypeIndex(ytext, textarea.selectionStart),
+      relEnd: createRelativePositionFromTypeIndex(ytext, textarea.selectionEnd),
+    });
+  };
+  textarea.addEventListener("select", updateCursor);
+  textarea.addEventListener("keyup", updateCursor);
+  textarea.addEventListener("click", updateCursor);
 
-   // ✅ Cleanup when switching/unmounting
-   ydoc._cleanup = () => {
-     textarea.removeEventListener("input", handleInput);
-     textarea.removeEventListener("select", updateCursor);
-     textarea.removeEventListener("keyup", updateCursor);
-     textarea.removeEventListener("click", updateCursor);
-   };
+  // --- Observe Yjs updates ---
+  ytext.observe(() => {
+    if (isApplyingLocal || !textarea) return;
+    textarea.value = ytext.toString();
+
+    const state = awareness.getLocalState();
+    if (!state?.cursor) return;
+
+    const absStart = createAbsolutePositionFromRelativePosition(state.cursor.relStart, ydoc);
+    const absEnd = createAbsolutePositionFromRelativePosition(state.cursor.relEnd, ydoc);
+
+    if (absStart && absEnd) {
+      textarea.setSelectionRange(absStart.index, absEnd.index);
+    }
+
+    renderCursors();
+  });
+
+  // --- Cleanup ---
+  ydoc._cleanup = () => {
+    textarea.removeEventListener("input", handleInput);
+    textarea.removeEventListener("select", updateCursor);
+    textarea.removeEventListener("keyup", updateCursor);
+    textarea.removeEventListener("click", updateCursor);
+  };
 }
 
-// --- Render cursors in overlay container ---
+// --- Render cursors overlay ---
 function renderCursors() {
   if (!awareness || !contentRef.value || !cursorsContainer.value) return;
   const textarea = contentRef.value;
   const container = cursorsContainer.value;
-
-  container.innerHTML = ""; // clear old
-
-  const text = textarea.value;
-  const lineHeight = 20;
-  const charWidth = 8;
+  container.innerHTML = "";
 
   const others = Array.from(awareness.getStates().values()).filter(
     (s) => s.user && s.cursor
   );
 
-  others.forEach((s) => {
-    const { start } = s.cursor;
-    const { name, color } = s.user;
+  const text = textarea.value;
 
-    const before = text.slice(0, start);
+  others.forEach((s) => {
+    const { relStart, user } = s.cursor ? s.cursor : {};
+    if (!relStart || !user) return;
+
+    const abs = createAbsolutePositionFromRelativePosition(relStart, ydoc);
+    if (!abs) return;
+
+    const before = text.slice(0, abs.index);
     const lines = before.split("\n");
     const line = lines.length - 1;
     const column = lines[lines.length - 1].length;
 
     const cursor = document.createElement("div");
     cursor.className = "remote-cursor";
-    cursor.textContent = `| ${name}`;
+    cursor.textContent = `| ${user.name}`;
     cursor.style.position = "absolute";
-    cursor.style.color = color;
-    cursor.style.left = `${charWidth * column}px`;
-    cursor.style.top = `${line * lineHeight}px`;
+    cursor.style.color = user.color;
+    cursor.style.left = `${8 * column}px`;
+    cursor.style.top = `${20 * line}px`;
     cursor.style.fontSize = "14px";
     container.appendChild(cursor);
   });
 }
 
-// --- Save document ---
+// --- Save ---
 function submit() {
   const now = new Date().toISOString();
-  // make sure we save current Yjs content (ytext) rather than stale localDoc.content
   const content = ytext ? ytext.toString() : localDoc.value.content;
   const updatedDoc = { ...localDoc.value, content, updated_at: now };
   emit("save", updatedDoc);
 }
 
-// --- Cleanup on unmount or switch ---
+// --- Cleanup ---
 function cleanupYjs() {
   if (ydoc) {
     ydoc._cleanup?.();
