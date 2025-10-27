@@ -19,6 +19,26 @@ const emit = defineEmits(["save"]);
 const localDoc = ref({ title: "", content: "", type: "text", _id: null });
 import ShareButton from "./ShareButton.vue";
 import CodeEditor from "./CodeEditor.vue";
+import { useDocuments } from "../composables/useDocuments.js";
+const { executeCode } = useDocuments();
+
+const runOutput = ref(null);
+const isRunning = ref(false);
+
+async function runCode() {
+
+  isRunning.value = true;
+  runOutput.value = null;
+  try {
+    const result = await executeCode(localDoc.value.content);
+    runOutput.value = result;
+  } catch (err) {
+    runOutput.value = `Execution error: ${err?.message || String(err)}`;
+  } finally {
+    isRunning.value = false;
+  }
+}
+
 
 // Yjs
 let ydoc = null;
@@ -290,6 +310,9 @@ onUnmounted(() => {
 
     <form @submit.prevent="submit">
       <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
+      <button type="button" v-if="localDoc.type === 'code'" @click="runCode" :disabled="isRunning">
+        {{ isRunning ? 'Running...' : 'Run' }}
+      </button>
 
       <label>Title</label>
       <input v-model="localDoc.title" type="text" placeholder="Title" required />
@@ -302,6 +325,12 @@ onUnmounted(() => {
 
       <CodeEditor v-model="localDoc.content" :mode="localDoc.type" />
     </form>
+
+    <div v-if="localDoc.type === 'code'" class="run-output">
+      <h3>Output</h3>
+      <div v-if="isRunning">Running...</div>
+      <pre v-else>{{ runOutput }}</pre>
+    </div>
   </div>
 </template>
 

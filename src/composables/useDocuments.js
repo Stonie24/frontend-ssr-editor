@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { useAuth } from "./User.js";
-const API_URL = "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/";
+const API_URL = "http://localhost:1337"/* "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/" */;
 
 export function useDocuments() {
   const documents = ref([]);
@@ -103,6 +103,31 @@ export function useDocuments() {
     }
   };
 
+const executeCode = async (data) => {
+  try {
+    const encodedCode = btoa(data);
+    var data = {
+      code: encodedCode
+    };
+    const response = await fetch("https://execjs.emilfolino.se/code", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    const result = await response.json();
+    const decodedOutput = atob(result.data);
+    return decodedOutput;
+  } catch (err) {
+      error.value = err.message;
+      return null;
+    }
+};
+
+
 
 
   return {
@@ -114,5 +139,6 @@ export function useDocuments() {
     addDocument,
     updateDocument,
     shareDocument,
+    executeCode
   };
 }
