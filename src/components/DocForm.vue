@@ -3,7 +3,8 @@ import { ref, watch, onUnmounted, onMounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
-import TextareaBinding from "y-textarea";
+import * as YTextarea from "y-textarea";
+const TextareaBinding = YTextarea.TextareaBinding || YTextarea;
 
 const socket = io("https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/");
 
