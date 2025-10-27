@@ -2,6 +2,7 @@
 import { ref, watch, onUnmounted } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
+import { Awareness } from "y-protocols/awareness.js";
 
 const socket = io("https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/");
 
@@ -39,6 +40,7 @@ watch(
   { immediate: true }
 );
 
+
 // ---------------------------
 // Handle initial document state from server
 // ---------------------------
@@ -51,6 +53,23 @@ socket.on("initDoc", ({ docId, update }) => {
   if (!ydoc) {
     ydoc = new Y.Doc();
     ytext = ydoc.getText("content");
+
+    // --- Setup awareness (user cursors) ---
+    const awareness = new Awareness(ydoc);
+
+    // identify this client
+    const userColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
+    const username = "User-" + Math.floor(Math.random() * 1000);
+
+    // store cursor + user info in local state
+    awareness.setLocalStateField("user", { name: username, color: userColor });
+
+    // listen for awareness updates from server
+    socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
+      if (incomingId === currentDocId) {
+        awareness.applyUpdate(new Uint8Array(update));
+      }
+    });
 
     // --- Send local changes to server ---
     ydoc.on("update", (update) => {
@@ -113,6 +132,56 @@ socket.on("docUpdate", ({ docId, update }) => {
   }
 });
 
+
+// ---------------------------
+// Look for inputs to help track users (edit awareness)
+// ---------------------------
+const textarea = document.getElementById("content");
+textarea.addEventListener("select", updateCursor);
+textarea.addEventListener("keyup", updateCursor);
+textarea.addEventListener("click", updateCursor);
+
+function updateCursor() {
+  if (ydoc) {
+    awareness.setLocalStateField("cursor", {
+        start: textarea.selectionStart,
+        end: textarea.selectionEnd,
+    });
+  }
+}
+
+const renderCursors = () => {
+  const others = Array.from(awareness.getStates().values()).filter(
+    (s) => s.user && s.cursor
+  );
+
+  // Remove old cursor highlights
+  document.querySelectorAll(".remote-cursor").forEach((el) => el.remove());
+
+  others.forEach((s) => {
+    if (!s.cursor) return;
+    const { start } = s.cursor;
+    const { name, color } = s.user;
+
+    const text = textarea.value;
+    const before = text.slice(0, start);
+    const lines = before.split("\n");
+    const line = lines.length - 1;
+    const column = lines[lines.length - 1].length;
+
+    // Create a floating cursor indicator (simple demo)
+    const cursorEl = document.createElement("div");
+    cursorEl.className = "remote-cursor";
+    cursorEl.textContent = `| ${name}`;
+    cursorEl.style.position = "absolute";
+    cursorEl.style.color = color;
+    cursorEl.style.left = `${8 * column}px`;
+    cursorEl.style.top = `${20 * line}px`;
+    textarea.parentElement.appendChild(cursorEl);
+  });
+};
+
+awareness.on("update", renderCursors);
 
 
 // ---------------------------
