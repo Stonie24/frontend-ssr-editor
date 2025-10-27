@@ -116,8 +116,20 @@ async function setupYjs(initialUpdate) {
   // --- Sync textarea ---
   // wait for DOM refs to be available (setupYjs may be called from socket events before mount)
   await nextTick();
+  // ensure template ref is available (socket init may fire before component mount)
+  if (!contentRef.value) {
+    // wait up to ~500ms for the ref to appear
+    for (let i = 0; i < 50 && !contentRef.value; i++) {
+      // 10ms intervals
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
   const textarea = contentRef.value;
-  if (!textarea) return;
+  if (!textarea) {
+    console.warn("DocForm: contentRef not available — cannot bind textarea");
+    return;
+  }
 
   // initialize textarea with current ytext
   textarea.value = ytext.toString();
