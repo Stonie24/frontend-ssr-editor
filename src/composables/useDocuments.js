@@ -81,6 +81,30 @@ export function useDocuments() {
     }
   };
 
+  const shareDocument = async (docId, toMail) => {
+    try {
+      const response = await fetch(`${API_URL}/api/sendMail`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token?.value || ''}`,
+        },
+        body: JSON.stringify({
+          toMail,
+          docId,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to share document");
+      return await response.json();
+    } catch (err) {
+      error.value = err.message;
+      return null;
+    }
+  };
+
+
+
   return {
     documents,
     doc,
@@ -89,5 +113,6 @@ export function useDocuments() {
     fetchDocument,
     addDocument,
     updateDocument,
+    shareDocument,
   };
 }

@@ -286,9 +286,7 @@ onUnmounted(() => {
 <template>
   <div class="doc-editor">
     <h2>{{ localDoc._id ? "Edit Document" : "Create Document" }}</h2>
-
-    <!-- Show Share button only if editing existing doc -->
-    <ShareButton v-if="localDoc._id" label="Share this document" />
+    <ShareButton v-if="localDoc._id" :docId="localDoc._id" label="Share this document" />
 
     <form @submit.prevent="submit">
       <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
