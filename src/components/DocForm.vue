@@ -4,24 +4,30 @@ import { io } from "socket.io-client";
 import * as Y from "yjs";
 import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
 import * as YTextarea from "y-textarea";
+
 const TextareaBinding = YTextarea.TextareaBinding || YTextarea;
 
+// --- Socket setup ---
 const socket = io("https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/");
 
+// --- Props & emits ---
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
 
 const localDoc = ref({ title: "", content: "" });
 
+// --- Yjs state ---
 let ydoc = null;
 let ytext = null;
 let awareness = null;
 let binding = null;
 let currentDocId = null;
 
+// --- React to document change from parent ---
 watch(
   () => props.doc,
   (v) => {
+    // Cleanup old doc
     if (ydoc) {
       ydoc.destroy();
       ydoc = null;
@@ -40,61 +46,68 @@ watch(
   { immediate: true }
 );
 
+// --- Socket.io -> Yjs wiring ---
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
 
-  if (!ydoc) {
-    ydoc = new Y.Doc();
-    ytext = ydoc.getText("content");
-    awareness = new Awareness(ydoc);
+  // Create new Y.Doc instance
+  ydoc = new Y.Doc();
+  ytext = ydoc.getText("content");
+  awareness = new Awareness(ydoc);
 
-    // Setup local user
-    const userColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
-    const username = "User-" + Math.floor(Math.random() * 1000);
-    awareness.setLocalStateField("user", { name: username, color: userColor });
+  // Identify local user
+  const userColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
+  const username = "User-" + Math.floor(Math.random() * 1000);
+  awareness.setLocalStateField("user", { name: username, color: userColor });
 
-    // Awareness updates
-    socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
-      if (incomingId === currentDocId) {
-        applyAwarenessUpdate(awareness, new Uint8Array(update));
-      }
-    });
+  // --- Awareness sync ---
+  socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
+    if (incomingId === currentDocId) {
+      applyAwarenessUpdate(awareness, new Uint8Array(update));
+    }
+  });
 
-    awareness.on("update", ({ added, updated, removed }) => {
-      const update = encodeAwarenessUpdate(
-        awareness,
-        added.concat(updated).concat(removed)
-      );
-      socket.emit("awarenessUpdate", { docId: currentDocId, update });
-    });
+  awareness.on("update", ({ added, updated, removed }) => {
+    const update = encodeAwarenessUpdate(
+      awareness,
+      added.concat(updated).concat(removed)
+    );
+    socket.emit("awarenessUpdate", { docId: currentDocId, update });
+  });
 
-    // Yjs document updates
-    ydoc.on("update", (update) => {
-      socket.emit("docChange", { docId: currentDocId, update });
-    });
+  // --- Document updates ---
+  // Send updates
+  ydoc.on("update", (update) => {
+    console.log("LOCAL Y UPDATE SENT");
+    socket.emit("docChange", { docId: currentDocId, update });
+  });
 
-    socket.on("docUpdate", ({ docId: incomingId, update }) => {
-      if (incomingId === currentDocId) {
-        Y.applyUpdate(ydoc, new Uint8Array(update));
-      }
-    });
+  // Receive updates
+  socket.on("docUpdate", ({ docId: incomingId, update }) => {
+    if (incomingId === currentDocId) {
+      console.log("REMOTE Y UPDATE RECEIVED");
+      Y.applyUpdate(ydoc, new Uint8Array(update));
+    }
+  });
 
-    // --- Y-Textarea binding ---
+  // Apply initial state BEFORE binding
+  Y.applyUpdate(ydoc, new Uint8Array(update));
+
+  // --- Bind Yjs to textarea ---
+  onMounted(() => {
     const textarea = document.getElementById("content");
     binding = new TextareaBinding(ytext, textarea, awareness);
-  }
-
-  // Apply initial Yjs state
-  Y.applyUpdate(ydoc, new Uint8Array(update));
+  });
 });
 
-// Save button
+// --- Manual save ---
 const submit = () => {
   const now = new Date().toISOString();
   const updatedDoc = { ...localDoc.value, updated_at: now };
   emit("save", updatedDoc);
 };
 
+// --- Cleanup ---
 onUnmounted(() => {
   socket.off("docUpdate");
   socket.off("initDoc");
@@ -102,6 +115,7 @@ onUnmounted(() => {
   if (ydoc) ydoc.destroy();
 });
 </script>
+
 
 
 <template>
