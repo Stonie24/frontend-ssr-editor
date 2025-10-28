@@ -90,6 +90,7 @@ h1 {
   border-radius: 8px;
   overflow-y: auto;
   max-height: 400px;
+  color:#242424;
 }
 .comment-item {
   background: #fff;
