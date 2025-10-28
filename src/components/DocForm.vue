@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted, nextTick } from "vue";
+import { ref, watch, onUnmounted, nextTick, computed } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import {
@@ -203,6 +203,19 @@ function addComment() {
   newCommentText.value = "";
 }
 
+// --- Get line number for a comment ---
+function getLineNumber(comment) {
+  if (!ydoc || !ytext || !comment.target) return "-";
+  const absStart = Y.createAbsolutePositionFromRelativePosition(
+    comment.target.start,
+    ydoc
+  );
+  if (!absStart) return "-";
+  const index = absStart.index;
+  const text = ytext.toString();
+  return text.slice(0, index).split("\n").length;
+}
+
 // --- Save document ---
 function submit() {
   const now = new Date().toISOString();
@@ -232,44 +245,51 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="doc-form">
-    <h2>{{ localDoc._id ? "Edit Document" : "Add New Document" }}</h2>
-    <form @submit.prevent="submit" class="new-doc">
-      <div id="doc-header">
-        <label for="title"><h3>Title</h3></label>
-        <input id="title" v-model="localDoc.title" placeholder="Title" required />
-        <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
-      </div>
+<div class="doc-form">
+  <h2>{{ localDoc._id ? "Edit Document" : "Add New Document" }}</h2>
+  <form @submit.prevent="submit" class="new-doc">
+    <div id="doc-header">
+      <label for="title"><h3>Title</h3></label>
+      <input id="title" v-model="localDoc.title" placeholder="Title" required />
+      <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
+    </div>
 
-      <div class="editor-container">
-        <textarea
-          ref="contentRef"
-          id="content"
-          placeholder="Content"
-          required
-          class="document-body"
-        ></textarea>
+    <div class="editor-container">
+      <!-- Textarea -->
+      <textarea
+        ref="contentRef"
+        id="content"
+        placeholder="Content"
+        required
+        class="document-body"
+      ></textarea>
 
-        <!-- Comments Sidebar -->
-        <div class="comments-panel">
-          <h3>Comments</h3>
-          <div v-for="comment in comments" :key="comment.id" class="comment-item">
-            <strong>{{ comment.author }}</strong>
-            <p>{{ comment.content }}</p>
-            <small>{{ new Date(comment.createdAt).toLocaleString() }}</small>
-          </div>
+      <!-- Comments Sidebar -->
+      <div class="comments-panel">
+        <h3>Comments</h3>
+        <div
+          v-for="comment in comments"
+          :key="comment.id"
+          class="comment-item"
+        >
+          <strong>{{ comment.author }}</strong> <br>
+          <small>Line: {{ getLineNumber(comment) }}</small>
+          <p>{{ comment.content }}</p>
+          <small>{{ new Date(comment.createdAt).toLocaleString() }}</small>
+        </div>
 
-          <div class="new-comment">
-            <textarea
-              v-model="newCommentText"
-              placeholder="Write a comment..."
-              rows="2"
-            ></textarea>
-            <button type="button" @click="addComment">Add Comment</button>
-          </div>
+        <div class="new-comment">
+          <textarea
+            id="comment-textarea"
+            v-model="newCommentText"
+            placeholder="Write a comment..."
+            rows="2"
+          ></textarea>
+          <button class="s-button" @click="addComment">Add Comment</button>
         </div>
       </div>
-    </form>
-  </div>
+    </div>
+  </form>
+</div>
 </template>
 <style scoped src="../style/style.css"></style>
