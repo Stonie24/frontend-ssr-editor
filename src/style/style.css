@@ -28,6 +28,7 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 h1 {
@@ -54,6 +55,11 @@ h1 {
   text-align: center;
 }
 
+.remote-cursor {
+  pointer-events: none;
+  font-size: 12px;
+  opacity: 0.8;
+}
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -66,4 +72,82 @@ h1 {
   button {
     background-color: #f9f9f9;
   }
+}
+
+.editor-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.document-body {
+  flex: 2;
+  min-height: 300px;
+  resize: vertical;
+  color:rgba(255, 255, 255, 0.87);
+}
+.comments-panel {
+  flex: 1;
+  background: #f7f7f7;
+  color: #242424;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-y: auto;
+  min-height: 400px;
+  max-width: 20vw;
+  overflow-wrap: break-word; 
+}
+.comment-item {
+  background: #242424;
+  color:  rgba(255, 255, 255, 0.87);
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1);
+}
+.new-comment textarea {
+  max-width: 18vw;
+  resize: none;
+  margin-top: 8px;  
+}
+.new-comment button {
+  margin-top: 6px;
+}
+
+.editor-container {
+  position: relative;
+  width: 70vw;
+  display: flex;
+  gap: 1rem;
+}
+
+#content {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.87);;
+  width: 100%;
+  min-height: 800px;
+  resize: none;
+}
+
+textarea {
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1.5;
+  padding: 1rem;
+  border: 1px solid #ccc; 
+  border-radius: 8px;
+}
+
+#comment-textarea {
+  width: 18vw;
+} 
+
+.s-button {
+  background-color: #646cff;
+  color: white;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  cursor: pointer;
 }

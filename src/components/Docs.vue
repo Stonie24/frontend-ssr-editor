@@ -6,7 +6,13 @@ import DocumentList from "./DocList.vue";
 import DocumentForm from "./DocForm.vue";
 
 const { documents, fetchDocuments, addDocument, updateDocument, error } = useDocuments();
-const selectedDoc = ref(null);
+
+const selectedDoc = ref({
+  _id: null,
+  title: "",
+  content: "",
+  type: "text",
+});
 
 const { user, token } = useAuth();
 const isLoggedIn = computed(() => !!token.value && !!user.value);
@@ -21,22 +27,32 @@ onMounted(async () => {
 
 
 const selectDoc = (doc) => {
-  selectedDoc.value = { ...doc };
+  selectedDoc.value = { type: "text", ...doc };
 };
+
 
 const saveDoc = async (doc) => {
   try {
     if (doc._id) {
-      await updateDocument(doc._id, doc);
+      const updated = await updateDocument(doc._id, doc);
+      selectedDoc.value = { ...updated };
     } else {
-      await addDocument(doc);
+      const created = await addDocument({
+        title: doc.title,
+        content: doc.content,
+        type: doc.type || "text",
+      });
+      selectedDoc.value = created && created._id ? { ...created } : null;
     }
-    selectedDoc.value = null;
+
     await fetchDocuments();
-    console.log("Documents reactive:", documents.value);
   } catch (e) {
     console.error(e);
   }
+};
+
+const newDoc = () => {
+  selectedDoc.value = { _id: null, title: "", content: "", type: "text" };
 };
 </script>
 
@@ -44,8 +60,17 @@ const saveDoc = async (doc) => {
   <div id="entire-app">
     <div v-if="isLoggedIn">
       <p>Welcome, {{ userEmail }}</p>
+      <div>
+        <button @click="newDoc">New Document</button>
+      </div>
+
       <DocumentList :documents="documents" @select="selectDoc" />
-      <DocumentForm :doc="selectedDoc" @save="saveDoc" />
+
+      <DocumentForm
+        :key="selectedDoc?._id || 'new'"
+        :doc="selectedDoc"
+        @save="saveDoc"
+      />
     </div>
 
     <div v-else>

@@ -21,6 +21,8 @@
     "vue": "^3.5.18",
     "vue-router": "^4.5.1",
     "vue-socket.io": "^3.0.10",
+    "y-protocols": "^1.0.6",
+    "y-textarea": "^1.0.2",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.27"
   },

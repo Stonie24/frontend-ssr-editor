@@ -1,32 +1,38 @@
 <script setup>
-import { ref, watch, onUnmounted } from "vue";
+import { ref, watch, onUnmounted, nextTick, computed } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
+import {
+  Awareness,
+  encodeAwarenessUpdate,
+  applyAwarenessUpdate,
+} from "y-protocols/awareness";
+import {
+  createRelativePositionFromTypeIndex,
+  createAbsolutePositionFromRelativePosition,
+} from "yjs";
 
-/*
-  Configure server URL:
-  - If you're using Vite, set VITE_SERVER_URL in .env (e.g. VITE_SERVER_URL=https://example.com)
-  - Otherwise replace the expression below with your server URL string.
-*/
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/";
+// CodeMirror för kod-läge (endast efter att dokumentet skapats)
+import { EditorView, basicSetup } from "codemirror";
+import { EditorState } from "@codemirror/state";
+import { javascript } from "@codemirror/lang-javascript";
 
-// single shared socket instance for this component
-const socket = io(SERVER_URL, { autoConnect: true });
-
-// props + emits
-const props = defineProps(["doc"]);
-const emit = defineEmits(["save"]);
-const localDoc = ref({ title: "", content: "", type: "text", _id: null });
 import ShareButton from "./ShareButton.vue";
-import CodeEditor from "./CodeEditor.vue";
 import { useDocuments } from "../composables/useDocuments.js";
 const { executeCode } = useDocuments();
 
+// --- Props/Emits ---
+const props = defineProps(["doc"]);
+const emit = defineEmits(["save"]);
+
+// --- Lokal modell: börja med tomt plaintext ---
+const localDoc = ref({ title: "", content: "", type: "text", _id: null });
+const hasCollab = computed(() => !!localDoc.value._id); // bara efter Create
+
+// --- Körning ---
 const runOutput = ref(null);
 const isRunning = ref(false);
-
 async function runCode() {
-
   isRunning.value = true;
   runOutput.value = null;
   try {
@@ -39,291 +45,392 @@ async function runCode() {
   }
 }
 
+// --- Refs för editors ---
+const contentRef = ref(null);   // textarea (text-läge efter create)
+const codeHostRef = ref(null);  // CodeMirror mount (code-läge efter create)
+let cmView = null;
 
-// Yjs
+// --- Kommentarer ---
+const comments = ref([]);
+const newCommentText = ref("");
+const selectedRange = ref(null);
+
+// --- Yjs/Socket state (endast efter create) ---
 let ydoc = null;
 let ytext = null;
-let ydocUpdateHandler = null; // reference so we can remove it
-let ytextObserver = null;
-
-// track current docId
+let ycomments = null;
+let awareness = null;
 let currentDocId = null;
+let isApplyingLocal = false;
 
-// Helper: clean up the current ydoc and listeners
-function teardownYdoc() {
-  try {
-    if (ytext && ytextObserver) {
-      ytext.unobserve(ytextObserver);
-      ytextObserver = null;
-    }
-  } catch (e) {
-    // some Yjs builds may not throw on unobserve; ignore errors
+const socket = io(
+  "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/"
+);
+
+// --- Hjälpare: diff till Y.Text ---
+function applyDiffIntoYText(oldStr, newStr) {
+  if (!ytext) return;
+  if (oldStr === newStr) return;
+
+  let start = 0;
+  const oLen = oldStr.length;
+  const nLen = newStr.length;
+  while (start < oLen && start < nLen && oldStr[start] === newStr[start]) start++;
+
+  let oEnd = oLen - 1;
+  let nEnd = nLen - 1;
+  while (oEnd >= start && nEnd >= start && oldStr[oEnd] === newStr[nEnd]) {
+    oEnd--;
+    nEnd--;
   }
 
-  try {
-    if (ydoc && ydocUpdateHandler) {
-      // Yjs Doc exposes `off` to remove listeners registered with `on`
-      if (typeof ydoc.off === "function") {
-        ydoc.off("update", ydocUpdateHandler);
-      }
-      ydocUpdateHandler = null;
-    }
-  } catch (e) {
-    // ignore if not supported
-  }
+  const deleteLen = Math.max(0, oEnd - start + 1);
+  const insertText = newStr.slice(start, nEnd + 1);
 
-  try {
-    if (ydoc && typeof ydoc.destroy === "function") {
-      ydoc.destroy();
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  ydoc = null;
-  ytext = null;
+  isApplyingLocal = true;
+  ydoc.transact(() => {
+    if (deleteLen > 0) ytext.delete(start, deleteLen);
+    if (insertText.length > 0) ytext.insert(start, insertText);
+  }, "local");
+  isApplyingLocal = false;
 }
 
-// ---------------------------
-// Server requestSave handler
-// ---------------------------
-// ensure we only have one listener registered on the socket for `requestSave`
-socket.off("requestSave");
-socket.on("requestSave", async ({ docId }) => {
-  if (docId !== currentDocId) return;
+// --- Awareness cursor ---
+function setAwarenessCursor(start, end) {
+  if (!awareness || !ytext) return;
+  awareness.setLocalStateField("cursor", {
+    start: createRelativePositionFromTypeIndex(ytext, start),
+    end: createRelativePositionFromTypeIndex(ytext, end),
+  });
+  selectedRange.value = { start, end };
+}
 
-  console.log("Server requested save before new user joins:", docId);
-
-  const updatedDoc = {
-    ...localDoc.value,
-    content: ytext ? ytext.toString() : localDoc.value.content,
-  };
-
-  // Send save request to the server (use SERVER_URL to make sure we hit the right host)
-  try {
-    const res = await fetch(`${SERVER_URL.replace(/\/+$/, "")}/api/docs/${encodeURIComponent(docId)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedDoc),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    console.log("Document saved successfully (server requested).");
-  } catch (err) {
-    console.error("Failed to save document on server request:", err);
-  }
-});
-
-// ---------------------------
-// Watch prop.doc changes
-// ---------------------------
+// --- Hantera props.doc ---
 watch(
   () => props.doc,
-  (v) => {
-    // copy the incoming doc into a local reactive object
-    localDoc.value = v ? { ...v } : { title: "", content: "" };
+  async (v) => {
+    // 1) Rensa ev. tidigare Yjs
+    cleanupYjs();
+    destroyCodeMirror();
 
-    // If there is an _id, we should join collaborative editing for that doc
+    // 2) Om parent ger doc -> använd den, annars börja från tomt
+    localDoc.value = v ? { type: "text", _id: null, ...v } : { title: "", content: "", type: "text", _id: null };
+
+    // 3) Om doc har _id -> gå in i collab-läge
     if (v && v._id) {
-      // If changing to a different doc, teardown previous ydoc and listeners
-      if (currentDocId && currentDocId !== v._id) {
-        teardownYdoc();
-      }
-
       currentDocId = v._id;
-      console.log("Joining collaborative document:", currentDocId);
-
-      // emit joinDoc
       socket.emit("joinDoc", currentDocId);
     } else {
-      // no doc selected -> teardown collaborative state
-      currentDocId = null;
-      teardownYdoc();
+      currentDocId = null; // stå i lokalt läge (ingen Yjs)
     }
   },
   { immediate: true }
 );
 
-// ---------------------------
-// initDoc handler (server sends the current Y state)
-// ---------------------------
-// ensure only one listener for initDoc
+// --- Yjs init från server ---
 socket.off("initDoc");
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
-  console.log("Received initial Yjs document for", docId);
+  setupYjs(update);
+});
 
-  console.log("Received initial document state for", docId);
+// --- Setup Yjs för aktivt dokument ---
+async function setupYjs(initialUpdate) {
+  if (ydoc) return;
 
-  // If a ydoc already exists for the same doc, reuse it; otherwise create new
-  if (!ydoc) {
-    ydoc = new Y.Doc();
-    ytext = ydoc.getText("content");
+  ydoc = new Y.Doc();
+  ytext = ydoc.getText("content");
+  ycomments = ydoc.getArray("comments");
+  awareness = new Awareness(ydoc);
 
-    // If localDoc already has content (from the API) and the ydoc is empty, initialize
-    if (localDoc.value && localDoc.value.content && ytext.length === 0) {
-      ytext.insert(0, localDoc.value.content);
+  // Awareness sync
+  socket.off("awarenessUpdate");
+  socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
+    if (incomingId === currentDocId) {
+      applyAwarenessUpdate(awareness, new Uint8Array(update));
     }
+  });
 
-    // Observe Yjs content and sync to Vue localDoc
-    ytextObserver = () => {
-      const newContent = ytext.toString();
-      if (localDoc.value.content !== newContent) {
-        localDoc.value.content = newContent;
+  awareness.on("update", ({ added, updated, removed }) => {
+    const update = encodeAwarenessUpdate(awareness, added.concat(updated).concat(removed));
+    socket.emit("awarenessUpdate", { docId: currentDocId, update });
+  });
+
+  // Yjs updates -> server
+  ydoc.on("update", (update) => {
+    socket.emit("docChange", { docId: currentDocId, update });
+  });
+
+  // Server -> Yjs apply
+  socket.off("docUpdate");
+  socket.on("docUpdate", ({ docId: incomingId, update }) => {
+    if (incomingId === currentDocId) {
+      Y.applyUpdate(ydoc, new Uint8Array(update));
+    }
+  });
+
+  if (initialUpdate) {
+    Y.applyUpdate(ydoc, new Uint8Array(initialUpdate));
+  }
+
+  // Sätt initialt innehåll (om Yjs tomt, använd lokalt)
+  const initialLocal = localDoc.value?.content ?? "";
+  if (ytext.length === 0 && initialLocal) {
+    ytext.insert(0, initialLocal);
+  }
+
+  await nextTick();
+
+  // Håll Vue-modell i sync med Yjs
+  ytext.observe(() => {
+    if (isApplyingLocal) return;
+    const nextText = ytext.toString();
+    if (localDoc.value.content !== nextText) localDoc.value.content = nextText;
+
+    if (localDoc.value.type === "text" && contentRef.value) {
+      const ta = contentRef.value;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      ta.value = nextText;
+      const state = awareness.getLocalState();
+      if (state?.cursor) {
+        const absStart = createAbsolutePositionFromRelativePosition(state.cursor.start, ydoc);
+        const absEnd = createAbsolutePositionFromRelativePosition(state.cursor.end, ydoc);
+        if (absStart && absEnd) ta.setSelectionRange(absStart.index, absEnd.index);
+      } else {
+        ta.setSelectionRange(start, end);
       }
-    };
-    ytext.observe(ytextObserver);
-
-    // When ydoc emits updates locally, forward them to server
-    ydocUpdateHandler = (upd) => {
-      // `upd` is typically a Uint8Array or ArrayBuffer; socket.io supports binary
-      // We send it as-is and let the server convert as needed.
-      socket.emit("docChange", { docId: currentDocId, update: upd });
-    };
-
-    ydoc.on("update", ydocUpdateHandler);
-  }
-
-  // Apply the incoming update safely
-  try {
-    // update may be a typed array, array buffer, or a plain array of numbers.
-    // Y.applyUpdate accepts Uint8Array or ArrayBuffer; attempt a conversion that works for multiple shapes:
-    let u8;
-    if (update instanceof Uint8Array) {
-      u8 = update;
-    } else if (update instanceof ArrayBuffer) {
-      u8 = new Uint8Array(update);
-    } else if (Array.isArray(update)) {
-      u8 = new Uint8Array(update);
-    } else {
-      // fallback — try to create Uint8Array directly
-      u8 = new Uint8Array(update);
+    } else if (localDoc.value.type === "code" && cmView) {
+      const doc = cmView.state.doc.toString();
+      if (doc !== nextText) {
+        const sel = cmView.state.selection.main;
+        cmView.dispatch({
+          changes: { from: 0, to: cmView.state.doc.length, insert: nextText },
+          selection: { anchor: sel.anchor, head: sel.head },
+        });
+      }
     }
-    Y.applyUpdate(ydoc, u8);
-  } catch (err) {
-    console.error("Failed to apply initDoc update:", err);
+  });
+
+  // Kommentarer
+  ycomments.observe(() => {
+    comments.value = ycomments.toArray();
+  });
+  comments.value = ycomments.toArray();
+
+  // Init editor för collab-läge
+  if (localDoc.value.type === "text") {
+    initTextareaBindings();
+  } else {
+    initCodeMirror();
   }
-});
+}
 
-// ---------------------------
-// docUpdate handler (incremental updates from others)
-// ---------------------------
-socket.off("docUpdate");
-socket.on("docUpdate", ({ docId, update }) => {
-  if (docId !== currentDocId || !ydoc) return;
+// --- Textarea-bindningar i collab-läge ---
+function initTextareaBindings() {
+  const ta = contentRef.value;
+  if (!ta) return;
+  ta.value = ytext.toString();
 
-  try {
-    let u8;
-    if (update instanceof Uint8Array) {
-      u8 = update;
-    } else if (update instanceof ArrayBuffer) {
-      u8 = new Uint8Array(update);
-    } else if (Array.isArray(update)) {
-      u8 = new Uint8Array(update);
-    } else {
-      u8 = new Uint8Array(update);
-    }
-    Y.applyUpdate(ydoc, u8);
-  } catch (err) {
-    console.error("Failed to apply docUpdate:", err);
-  }
-});
-
-// ---------------------------
-// Server requesting a save (before new user joins)
-// ---------------------------
-socket.on("requestSave", async ({ docId }) => {
-  if (docId !== currentDocId) return;
-
-  console.log("Server requested save before join:", docId);
-
-  const updatedDoc = {
-    ...localDoc.value,
-    content: ytext ? ytext.toString() : localDoc.value.content,
+  const handleInput = (e) => {
+    applyDiffIntoYText(ytext.toString(), e.target.value);
+  };
+  const updateCursor = () => {
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    setAwarenessCursor(start, end);
   };
 
-  try {
-    await fetch(`/api/docs/${docId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedDoc),
-    });
-    console.log("Document saved successfully.");
-  } catch (err) {
-    console.error("Failed to save document:", err);
+  ta.addEventListener("input", handleInput);
+  ta.addEventListener("select", updateCursor);
+  ta.addEventListener("keyup", updateCursor);
+  ta.addEventListener("click", updateCursor);
+}
+
+// --- CodeMirror i collab-läge ---
+function initCodeMirror() {
+  if (!codeHostRef.value) return;
+  destroyCodeMirror();
+  cmView = new EditorView({
+    state: EditorState.create({
+      doc: ytext.toString(),
+      extensions: [
+        basicSetup,
+        javascript(),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const text = update.state.doc.toString();
+            applyDiffIntoYText(ytext.toString(), text);
+            localDoc.value.content = text;
+          }
+          if (update.selectionSet) {
+            const sel = update.state.selection.main;
+            setAwarenessCursor(sel.from, sel.to);
+          }
+        }),
+      ],
+    }),
+    parent: codeHostRef.value,
+  });
+}
+
+function destroyCodeMirror() {
+  if (cmView) {
+    cmView.destroy();
+    cmView = null;
   }
-});
+}
 
-// ---------------------------
-// Sync Vue edits -> Yjs text
-// ---------------------------
+// --- Växla typ: initiera rätt editor efter create ---
 watch(
-  () => localDoc.value.content,
-  (newValue) => {
-    if (!ytext) return;
-    const current = ytext.toString();
-    if (newValue === current) return;
+  () => localDoc.value.type,
+  async (type) => {
+    await nextTick();
+    if (!hasCollab.value) return; // före Create kör vi bara enkel v-model textarea
 
-    // Efficiently replace content: delete then insert
-    try {
-      // Only make Yjs changes if they differ
-      ytext.delete(0, ytext.length);
-      ytext.insert(0, newValue || "");
-    } catch (err) {
-      console.error("Failed to update Yjs text from local model:", err);
+    if (type === "text") {
+      destroyCodeMirror();
+      initTextareaBindings();
+    } else if (type === "code") {
+      initCodeMirror();
     }
   }
 );
 
-// ---------------------------
-// Manual save handler (Save button)
- // emits 'save' event upward — your parent should handle saving via API
-// ---------------------------
-function submit() {
-  const updatedDoc = {
-    ...localDoc.value,
-    updated_at: new Date().toISOString(),
+// --- Kommentarer ---
+function addComment() {
+  if (!selectedRange.value || !newCommentText.value.trim() || !ycomments) return;
+  const { start, end } = selectedRange.value;
+  const newComment = {
+    id: crypto.randomUUID(),
+    author: "Anonymous",
+    content: newCommentText.value.trim(),
+    createdAt: new Date().toISOString(),
+    target: {
+      start: Y.createRelativePositionFromTypeIndex(ytext, start),
+      end: Y.createRelativePositionFromTypeIndex(ytext, end),
+    },
   };
+  ycomments.push([newComment]);
+  newCommentText.value = "";
+}
+
+function getLineNumber(comment) {
+  if (!ydoc || !ytext || !comment.target) return "-";
+  const absStart = Y.createAbsolutePositionFromRelativePosition(comment.target.start, ydoc);
+  if (!absStart) return "-";
+  const index = absStart.index;
+  const text = ytext.toString();
+  return text.slice(0, index).split("\n").length;
+}
+
+// --- Spara (Create/Save) ---
+function submit() {
+  const now = new Date().toISOString();
+  const content = hasCollab.value && ytext ? ytext.toString() : localDoc.value.content;
+  const updatedDoc = { ...localDoc.value, content, updated_at: now };
   emit("save", updatedDoc);
 }
 
-// ---------------------------
-// Clean up when component unmounts
-// ---------------------------
+// --- Rensa ---
+function cleanupYjs() {
+  destroyCodeMirror();
+  if (ydoc) ydoc.destroy();
+  ydoc = null;
+  ytext = null;
+  ycomments = null;
+  awareness = null;
+}
+
 onUnmounted(() => {
-  // remove our socket listeners we registered
-  socket.off("requestSave");
-  socket.off("initDoc");
+  cleanupYjs();
   socket.off("docUpdate");
-
-  // tear down ydoc
-  teardownYdoc();
-
-  // optionally disconnect the socket if this is the only component using it
-  // socket.disconnect();
+  socket.off("initDoc");
+  socket.off("awarenessUpdate");
 });
 </script>
 
 <template>
   <div class="doc-editor">
     <h2>{{ localDoc._id ? "Edit Document" : "Create Document" }}</h2>
-    <ShareButton v-if="localDoc._id" :docId="localDoc._id" label="Share this document" />
 
-    <form @submit.prevent="submit">
-      <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
-      <button type="button" v-if="localDoc.type === 'code'" @click="runCode" :disabled="isRunning">
-        {{ isRunning ? 'Running...' : 'Run' }}
-      </button>
+    <ShareButton
+      v-if="localDoc._id"
+      :docId="localDoc._id"
+      label="Share this document"
+    />
 
-      <label>Title</label>
-      <input v-model="localDoc.title" type="text" placeholder="Title" required />
+    <form @submit.prevent="submit" class="new-doc">
+      <div id="doc-header">
+        <label for="title"><h3>Title</h3></label>
+        <input id="title" v-model="localDoc.title" placeholder="Title" required />
+        <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
+
+        <button
+          type="button"
+          v-if="localDoc.type === 'code'"
+          @click="runCode"
+          :disabled="isRunning"
+          style="margin-left: 8px"
+        >
+          {{ isRunning ? 'Running...' : 'Run' }}
+        </button>
+      </div>
 
       <label>Document type</label>
+      <!-- Tillåten att ändra innan Create -->
       <select v-model="localDoc.type" :disabled="!!localDoc._id">
         <option value="text">Plain Text</option>
         <option value="code">JavaScript Code</option>
       </select>
 
-      <CodeEditor v-model="localDoc.content" :mode="localDoc.type" />
+      <div class="editor-container">
+        <!-- Före Create: enkel textarea (lokal v-model) -->
+        <textarea
+          v-if="!hasCollab"
+          v-model="localDoc.content"
+          class="document-body"
+          placeholder="Content"
+          required
+        ></textarea>
+
+        <!-- Efter Create + text-läge: Yjs-kopplad textarea -->
+        <textarea
+          v-else-if="localDoc.type === 'text'"
+          ref="contentRef"
+          class="document-body"
+          placeholder="Content"
+          required
+        ></textarea>
+
+        <!-- Efter Create + code-läge: CodeMirror mount -->
+        <div v-else ref="codeHostRef" class="code-editor"></div>
+
+        <!-- Kommentarer endast efter Create -->
+        <div v-if="hasCollab" class="comments-panel">
+          <h3>Comments</h3>
+          <div
+            v-for="comment in comments"
+            :key="comment.id"
+            class="comment-item"
+          >
+            <strong>{{ comment.author }}</strong><br />
+            <small>Line: {{ getLineNumber(comment) }}</small>
+            <p>{{ comment.content }}</p>
+            <small>{{ new Date(comment.createdAt).toLocaleString() }}</small>
+          </div>
+
+          <div class="new-comment">
+            <textarea
+              id="comment-textarea"
+              v-model="newCommentText"
+              placeholder="Write a comment..."
+              rows="2"
+            ></textarea>
+            <button class="s-button" type="button" @click="addComment">Add Comment</button>
+          </div>
+        </div>
+      </div>
     </form>
 
     <div v-if="localDoc.type === 'code'" class="run-output">
@@ -334,4 +441,40 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style src="../style/docs.css" scoped></style>
+<style scoped src="../style/docs.css"></style>
+<style scoped>
+.code-editor {
+  min-height: 300px;
+  border: 1px solid #ddd;
+  background-color: #1e1e1e;
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 10px;
+}
+.document-body {
+  width: 100%;
+  height: 300px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+}
+.editor-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  align-items: start;
+}
+.comments-panel {
+  border-left: 1px solid #eee;
+  padding-left: 12px;
+}
+.comment-item {
+  border: 1px solid #eee;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.run-output {
+  margin-top: 16px;
+}
+</style>
