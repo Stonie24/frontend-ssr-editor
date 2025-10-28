@@ -48,7 +48,6 @@ const codeHostRef = ref(null);
 let cmView = null;
 
 const comments = ref([]);
-const newCommentText = ref("");
 const selectedRange = ref(null);
 
 
@@ -196,7 +195,6 @@ async function setupYjs(initialUpdate) {
     } else if (localDoc.value.type === "code" && cmView) {
       const doc = cmView.state.doc.toString();
       if (doc !== nextText) {
-        // bevara selection
         const sel = cmView.state.selection.main;
         cmView.dispatch({
           changes: { from: 0, to: cmView.state.doc.length, insert: nextText },
@@ -302,8 +300,6 @@ function handleAddComment(text) {
   ycomments.push([newComment]);
 }
 
-
-
 function getLineNumber(comment) {
   if (!ydoc || !ytext || !comment.target) return "-";
   const absStart = Y.createAbsolutePositionFromRelativePosition(comment.target.start, ydoc);
@@ -312,7 +308,6 @@ function getLineNumber(comment) {
   const text = ytext.toString();
   return text.slice(0, index).split("\n").length;
 }
-
 
 function submit() {
   const now = new Date().toISOString();
@@ -346,9 +341,7 @@ onUnmounted(() => {
   <div class="doc-editor">
     <h2>{{ localDoc._id ? "Edit Document" : "Create Document" }}</h2>
 
-    <ShareButton
-      v-if="localDoc._id"
-      :docId="localDoc._id"
+    <ShareButton v-if="localDoc._id" :docId="localDoc._id"
       label="Share this document"
     />
 
@@ -358,10 +351,7 @@ onUnmounted(() => {
         <input id="title" v-model="localDoc.title" placeholder="Title" required />
         <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
 
-        <button
-          type="button"
-          v-if="localDoc.type === 'code'"
-          @click="runCode"
+        <button v-if="localDoc.type === 'code'" @click="runCode"
           :disabled="isRunning"
         >
           {{ isRunning ? 'Running...' : 'Run' }}
@@ -377,18 +367,15 @@ onUnmounted(() => {
 
       <div class="editor-container">
 
-        <textarea
-          v-if="localDoc.type === 'text'"
+        <textarea v-if="localDoc.type === 'text'"
           ref="contentRef"
           class="document-body"
           placeholder="Content"
-          required
-        ></textarea>
+          required>
+        </textarea>
 
         <div v-else ref="codeHostRef" class="code-editor"></div>
-          <CommentsPanel
-            :comments="comments"
-            :getLineNumber="getLineNumber"
+          <CommentsPanel :comments="comments" :getLineNumber="getLineNumber"
             @add="handleAddComment"
           />
 
