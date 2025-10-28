@@ -45,7 +45,18 @@ const saveDoc = async (doc) => {
     <div v-if="isLoggedIn">
       <p>Welcome, {{ userEmail }}</p>
       <DocumentList :documents="documents" @select="selectDoc" />
-      <DocumentForm :doc="selectedDoc" @save="saveDoc" />
+
+    
+      <DocumentForm
+        v-if="selectedDoc"
+        :key="selectedDoc._id"
+        :doc="selectedDoc"
+        @save="saveDoc"
+      />
+
+      <div v-else class="placeholder">
+        <p>Select a document to start editing.</p>
+      </div>
     </div>
 
     <div v-else>

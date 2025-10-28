@@ -54,6 +54,11 @@ h1 {
   text-align: center;
 }
 
+.remote-cursor {
+  pointer-events: none;
+  font-size: 12px;
+  opacity: 0.8;
+}
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -66,4 +71,38 @@ h1 {
   button {
     background-color: #f9f9f9;
   }
+}
+
+.editor-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.document-body {
+  flex: 2;
+  min-height: 300px;
+  resize: vertical;
+}
+.comments-panel {
+  flex: 1;
+  background: #f7f7f7;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+.comment-item {
+  background: #fff;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1);
+}
+.new-comment textarea {
+  width: 100%;
+  resize: none;
+  margin-top: 8px;
+}
+.new-comment button {
+  margin-top: 6px;
 }

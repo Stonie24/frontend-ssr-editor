@@ -1,5 +1,5 @@
 import { ref } from "vue";
-const API_URL = "http://localhost:1337";
+const API_URL = "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/";
 
 export function User() {
   const { setAuth } = useAuth();
