@@ -44,6 +44,9 @@ const saveDoc = async (doc) => {
   <div id="entire-app">
     <div v-if="isLoggedIn">
       <p>Welcome, {{ userEmail }}</p>
+      <div>
+        
+      </div>
       <DocumentList :documents="documents" @select="selectDoc" />
 
     
