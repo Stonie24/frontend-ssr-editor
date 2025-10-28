@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted, nextTick, computed } from "vue";
+import { ref, watch, onUnmounted, nextTick } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import {
@@ -12,26 +12,22 @@ import {
   createAbsolutePositionFromRelativePosition,
 } from "yjs";
 
-// CodeMirror för kod-läge (endast efter att dokumentet skapats)
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
+
+const props = defineProps(["doc"]);
+const emit = defineEmits(["save"]);
+
+const localDoc = ref({ title: "", content: "", type: "text", _id: null });
 
 import ShareButton from "./ShareButton.vue";
 import { useDocuments } from "../composables/useDocuments.js";
 const { executeCode } = useDocuments();
 
-// --- Props/Emits ---
-const props = defineProps(["doc"]);
-const emit = defineEmits(["save"]);
-
-// --- Lokal modell: börja med tomt plaintext ---
-const localDoc = ref({ title: "", content: "", type: "text", _id: null });
-const hasCollab = computed(() => !!localDoc.value._id); // bara efter Create
-
-// --- Körning ---
 const runOutput = ref(null);
 const isRunning = ref(false);
+
 async function runCode() {
   isRunning.value = true;
   runOutput.value = null;
@@ -45,17 +41,16 @@ async function runCode() {
   }
 }
 
-// --- Refs för editors ---
-const contentRef = ref(null);   // textarea (text-läge efter create)
-const codeHostRef = ref(null);  // CodeMirror mount (code-läge efter create)
+
+const contentRef = ref(null); 
+const codeHostRef = ref(null);
 let cmView = null;
 
-// --- Kommentarer ---
 const comments = ref([]);
 const newCommentText = ref("");
 const selectedRange = ref(null);
 
-// --- Yjs/Socket state (endast efter create) ---
+
 let ydoc = null;
 let ytext = null;
 let ycomments = null;
@@ -63,11 +58,11 @@ let awareness = null;
 let currentDocId = null;
 let isApplyingLocal = false;
 
+
 const socket = io(
   "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/"
 );
 
-// --- Hjälpare: diff till Y.Text ---
 function applyDiffIntoYText(oldStr, newStr) {
   if (!ytext) return;
   if (oldStr === newStr) return;
@@ -95,7 +90,7 @@ function applyDiffIntoYText(oldStr, newStr) {
   isApplyingLocal = false;
 }
 
-// --- Awareness cursor ---
+
 function setAwarenessCursor(start, end) {
   if (!awareness || !ytext) return;
   awareness.setLocalStateField("cursor", {
@@ -105,36 +100,30 @@ function setAwarenessCursor(start, end) {
   selectedRange.value = { start, end };
 }
 
-// --- Hantera props.doc ---
 watch(
   () => props.doc,
   async (v) => {
-    // 1) Rensa ev. tidigare Yjs
     cleanupYjs();
-    destroyCodeMirror();
 
-    // 2) Om parent ger doc -> använd den, annars börja från tomt
     localDoc.value = v ? { type: "text", _id: null, ...v } : { title: "", content: "", type: "text", _id: null };
 
-    // 3) Om doc har _id -> gå in i collab-läge
+    destroyCodeMirror();
+
     if (v && v._id) {
       currentDocId = v._id;
       socket.emit("joinDoc", currentDocId);
     } else {
-      currentDocId = null; // stå i lokalt läge (ingen Yjs)
+      currentDocId = null;
     }
   },
   { immediate: true }
 );
 
-// --- Yjs init från server ---
-socket.off("initDoc");
 socket.on("initDoc", ({ docId, update }) => {
   if (docId !== currentDocId) return;
   setupYjs(update);
 });
 
-// --- Setup Yjs för aktivt dokument ---
 async function setupYjs(initialUpdate) {
   if (ydoc) return;
 
@@ -143,7 +132,6 @@ async function setupYjs(initialUpdate) {
   ycomments = ydoc.getArray("comments");
   awareness = new Awareness(ydoc);
 
-  // Awareness sync
   socket.off("awarenessUpdate");
   socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
     if (incomingId === currentDocId) {
@@ -156,12 +144,10 @@ async function setupYjs(initialUpdate) {
     socket.emit("awarenessUpdate", { docId: currentDocId, update });
   });
 
-  // Yjs updates -> server
   ydoc.on("update", (update) => {
     socket.emit("docChange", { docId: currentDocId, update });
   });
 
-  // Server -> Yjs apply
   socket.off("docUpdate");
   socket.on("docUpdate", ({ docId: incomingId, update }) => {
     if (incomingId === currentDocId) {
@@ -173,19 +159,23 @@ async function setupYjs(initialUpdate) {
     Y.applyUpdate(ydoc, new Uint8Array(initialUpdate));
   }
 
-  // Sätt initialt innehåll (om Yjs tomt, använd lokalt)
-  const initialLocal = localDoc.value?.content ?? "";
-  if (ytext.length === 0 && initialLocal) {
-    ytext.insert(0, initialLocal);
+  await nextTick();
+  const initial = ytext.toString();
+  localDoc.value.content = initial;
+
+  if (localDoc.value.type === "text") {
+    initTextareaBindings();
+  } else {
+    initCodeMirror();
   }
 
-  await nextTick();
-
-  // Håll Vue-modell i sync med Yjs
   ytext.observe(() => {
     if (isApplyingLocal) return;
     const nextText = ytext.toString();
-    if (localDoc.value.content !== nextText) localDoc.value.content = nextText;
+
+    if (localDoc.value.content !== nextText) {
+      localDoc.value.content = nextText;
+    }
 
     if (localDoc.value.type === "text" && contentRef.value) {
       const ta = contentRef.value;
@@ -196,13 +186,16 @@ async function setupYjs(initialUpdate) {
       if (state?.cursor) {
         const absStart = createAbsolutePositionFromRelativePosition(state.cursor.start, ydoc);
         const absEnd = createAbsolutePositionFromRelativePosition(state.cursor.end, ydoc);
-        if (absStart && absEnd) ta.setSelectionRange(absStart.index, absEnd.index);
+        if (absStart && absEnd) {
+          ta.setSelectionRange(absStart.index, absEnd.index);
+        }
       } else {
         ta.setSelectionRange(start, end);
       }
     } else if (localDoc.value.type === "code" && cmView) {
       const doc = cmView.state.doc.toString();
       if (doc !== nextText) {
+        // bevara selection
         const sel = cmView.state.selection.main;
         cmView.dispatch({
           changes: { from: 0, to: cmView.state.doc.length, insert: nextText },
@@ -212,21 +205,12 @@ async function setupYjs(initialUpdate) {
     }
   });
 
-  // Kommentarer
   ycomments.observe(() => {
     comments.value = ycomments.toArray();
   });
   comments.value = ycomments.toArray();
-
-  // Init editor för collab-läge
-  if (localDoc.value.type === "text") {
-    initTextareaBindings();
-  } else {
-    initCodeMirror();
-  }
 }
 
-// --- Textarea-bindningar i collab-läge ---
 function initTextareaBindings() {
   const ta = contentRef.value;
   if (!ta) return;
@@ -241,16 +225,21 @@ function initTextareaBindings() {
     setAwarenessCursor(start, end);
   };
 
+  ta.removeEventListener("input", handleInput);
+  ta.removeEventListener("select", updateCursor);
+  ta.removeEventListener("keyup", updateCursor);
+  ta.removeEventListener("click", updateCursor);
+
   ta.addEventListener("input", handleInput);
   ta.addEventListener("select", updateCursor);
   ta.addEventListener("keyup", updateCursor);
   ta.addEventListener("click", updateCursor);
 }
 
-// --- CodeMirror i collab-läge ---
 function initCodeMirror() {
   if (!codeHostRef.value) return;
   destroyCodeMirror();
+
   cmView = new EditorView({
     state: EditorState.create({
       doc: ytext.toString(),
@@ -281,12 +270,11 @@ function destroyCodeMirror() {
   }
 }
 
-// --- Växla typ: initiera rätt editor efter create ---
 watch(
   () => localDoc.value.type,
   async (type) => {
     await nextTick();
-    if (!hasCollab.value) return; // före Create kör vi bara enkel v-model textarea
+    if (!ytext) return;
 
     if (type === "text") {
       destroyCodeMirror();
@@ -297,9 +285,9 @@ watch(
   }
 );
 
-// --- Kommentarer ---
+
 function addComment() {
-  if (!selectedRange.value || !newCommentText.value.trim() || !ycomments) return;
+  if (!selectedRange.value || !newCommentText.value.trim()) return;
   const { start, end } = selectedRange.value;
   const newComment = {
     id: crypto.randomUUID(),
@@ -315,6 +303,7 @@ function addComment() {
   newCommentText.value = "";
 }
 
+
 function getLineNumber(comment) {
   if (!ydoc || !ytext || !comment.target) return "-";
   const absStart = Y.createAbsolutePositionFromRelativePosition(comment.target.start, ydoc);
@@ -324,18 +313,21 @@ function getLineNumber(comment) {
   return text.slice(0, index).split("\n").length;
 }
 
-// --- Spara (Create/Save) ---
+
 function submit() {
   const now = new Date().toISOString();
-  const content = hasCollab.value && ytext ? ytext.toString() : localDoc.value.content;
+  const content = ytext ? ytext.toString() : localDoc.value.content;
   const updatedDoc = { ...localDoc.value, content, updated_at: now };
   emit("save", updatedDoc);
 }
 
-// --- Rensa ---
+
 function cleanupYjs() {
   destroyCodeMirror();
-  if (ydoc) ydoc.destroy();
+  if (ydoc) {
+    ydoc._cleanup?.();
+    ydoc.destroy();
+  }
   ydoc = null;
   ytext = null;
   ycomments = null;
@@ -371,43 +363,31 @@ onUnmounted(() => {
           v-if="localDoc.type === 'code'"
           @click="runCode"
           :disabled="isRunning"
-          style="margin-left: 8px"
         >
           {{ isRunning ? 'Running...' : 'Run' }}
         </button>
       </div>
 
       <label>Document type</label>
-      <!-- Tillåten att ändra innan Create -->
       <select v-model="localDoc.type" :disabled="!!localDoc._id">
         <option value="text">Plain Text</option>
         <option value="code">JavaScript Code</option>
       </select>
 
-      <div class="editor-container">
-        <!-- Före Create: enkel textarea (lokal v-model) -->
-        <textarea
-          v-if="!hasCollab"
-          v-model="localDoc.content"
-          class="document-body"
-          placeholder="Content"
-          required
-        ></textarea>
 
-        <!-- Efter Create + text-läge: Yjs-kopplad textarea -->
+      <div class="editor-container">
+
         <textarea
-          v-else-if="localDoc.type === 'text'"
+          v-if="localDoc.type === 'text'"
           ref="contentRef"
           class="document-body"
           placeholder="Content"
           required
         ></textarea>
 
-        <!-- Efter Create + code-läge: CodeMirror mount -->
         <div v-else ref="codeHostRef" class="code-editor"></div>
 
-        <!-- Kommentarer endast efter Create -->
-        <div v-if="hasCollab" class="comments-panel">
+        <div class="comments-panel">
           <h3>Comments</h3>
           <div
             v-for="comment in comments"
@@ -442,39 +422,3 @@ onUnmounted(() => {
 </template>
 
 <style scoped src="../style/docs.css"></style>
-<style scoped>
-.code-editor {
-  min-height: 300px;
-  border: 1px solid #ddd;
-  background-color: #1e1e1e;
-  color: #fff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  padding: 10px;
-}
-.document-body {
-  width: 100%;
-  height: 300px;
-  border: 1px solid #ddd;
-  padding: 10px;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
-}
-.editor-container {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 16px;
-  align-items: start;
-}
-.comments-panel {
-  border-left: 1px solid #eee;
-  padding-left: 12px;
-}
-.comment-item {
-  border: 1px solid #eee;
-  padding: 8px;
-  border-radius: 6px;
-  margin-bottom: 8px;
-}
-.run-output {
-  margin-top: 16px;
-}
-</style>
