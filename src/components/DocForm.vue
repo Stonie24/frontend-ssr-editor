@@ -2,50 +2,25 @@
 import { ref, watch, onUnmounted, nextTick } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
-import {
-  Awareness,
-  encodeAwarenessUpdate,
-  applyAwarenessUpdate,
-} from "y-protocols/awareness";
-import {
-  createRelativePositionFromTypeIndex,
-  createAbsolutePositionFromRelativePosition,
-} from "yjs";
+import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
+import { createRelativePositionFromTypeIndex, createAbsolutePositionFromRelativePosition } from "yjs";
 
-// ✅ Props and emits
+//  Props and emits
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
 
-// ✅ Local reactive state
+// Remove cursor overlay refs and user identity
 const localDoc = ref({ title: "", content: "" });
 const contentRef = ref(null);
-const cursorsContainer = ref(null);
 
-// --- Yjs-related state ---
+// Keep core Yjs state
 let ydoc = null;
 let ytext = null;
 let awareness = null;
 let currentDocId = null;
 let isApplyingLocal = false;
 
-// ✅ Persistent user identity
-const username =
-  localStorage.getItem("username") ||
-  (() => {
-    const name = "User-" + Math.floor(Math.random() * 1000);
-    localStorage.setItem("username", name);
-    return name;
-  })();
-
-const userColor =
-  localStorage.getItem("userColor") ||
-  (() => {
-    const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
-    localStorage.setItem("userColor", color);
-    return color;
-  })();
-
-// ✅ Socket
+// Socket
 const socket = io(
   "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/"
 );
@@ -78,17 +53,11 @@ async function setupYjs(initialUpdate) {
   ytext = ydoc.getText("content");
   awareness = new Awareness(ydoc);
 
-  awareness.setLocalStateField("user", {
-    name: username,
-    color: userColor,
-  });
-
-  // Awareness listeners
+  // Keep only core cursor position syncing
   socket.off("awarenessUpdate");
   socket.on("awarenessUpdate", ({ docId: incomingId, update }) => {
     if (incomingId === currentDocId) {
       applyAwarenessUpdate(awareness, new Uint8Array(update));
-      renderCursors();
     }
   });
 
@@ -98,7 +67,6 @@ async function setupYjs(initialUpdate) {
       added.concat(updated).concat(removed)
     );
     socket.emit("awarenessUpdate", { docId: currentDocId, update });
-    renderCursors();
   });
 
   // Yjs doc update listeners
@@ -157,77 +125,32 @@ async function setupYjs(initialUpdate) {
   const updateCursor = () => {
     if (!awareness || !ytext || !textarea) return;
     awareness.setLocalStateField("cursor", {
-      relStart: createRelativePositionFromTypeIndex(ytext, textarea.selectionStart),
-      relEnd: createRelativePositionFromTypeIndex(ytext, textarea.selectionEnd),
+      start: createRelativePositionFromTypeIndex(ytext, textarea.selectionStart),
+      end: createRelativePositionFromTypeIndex(ytext, textarea.selectionEnd),
     });
   };
   textarea.addEventListener("select", updateCursor);
   textarea.addEventListener("keyup", updateCursor);
   textarea.addEventListener("click", updateCursor);
 
-  // --- Observe Yjs updates ---
+  // Keep cursor position syncing in ytext observer
   ytext.observe(() => {
     if (isApplyingLocal || !textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
     textarea.value = ytext.toString();
-
+    
     const state = awareness.getLocalState();
-    if (!state?.cursor) return;
-
-    const absStart = createAbsolutePositionFromRelativePosition(state.cursor.relStart, ydoc);
-    const absEnd = createAbsolutePositionFromRelativePosition(state.cursor.relEnd, ydoc);
-
-    if (absStart && absEnd) {
-      textarea.setSelectionRange(absStart.index, absEnd.index);
+    if (state?.cursor) {
+      const absStart = createAbsolutePositionFromRelativePosition(state.cursor.start, ydoc);
+      const absEnd = createAbsolutePositionFromRelativePosition(state.cursor.end, ydoc);
+      if (absStart && absEnd) {
+        textarea.setSelectionRange(absStart.index, absEnd.index);
+      }
     }
-
-    renderCursors();
-  });
-
-  // --- Cleanup ---
-  ydoc._cleanup = () => {
-    textarea.removeEventListener("input", handleInput);
-    textarea.removeEventListener("select", updateCursor);
-    textarea.removeEventListener("keyup", updateCursor);
-    textarea.removeEventListener("click", updateCursor);
-  };
-}
-
-// --- Render cursors overlay ---
-function renderCursors() {
-  if (!awareness || !contentRef.value || !cursorsContainer.value) return;
-  const textarea = contentRef.value;
-  const container = cursorsContainer.value;
-  container.innerHTML = "";
-
-  const others = Array.from(awareness.getStates().values()).filter(
-    (s) => s.user && s.cursor
-  );
-
-  const text = textarea.value;
-
-  others.forEach((s) => {
-    const { relStart, user } = s.cursor ? s.cursor : {};
-    if (!relStart || !user) return;
-
-    const abs = createAbsolutePositionFromRelativePosition(relStart, ydoc);
-    if (!abs) return;
-
-    const before = text.slice(0, abs.index);
-    const lines = before.split("\n");
-    const line = lines.length - 1;
-    const column = lines[lines.length - 1].length;
-
-    const cursor = document.createElement("div");
-    cursor.className = "remote-cursor";
-    cursor.textContent = `| ${user.name}`;
-    cursor.style.position = "absolute";
-    cursor.style.color = user.color;
-    cursor.style.left = `${8 * column}px`;
-    cursor.style.top = `${20 * line}px`;
-    cursor.style.fontSize = "14px";
-    container.appendChild(cursor);
   });
 }
+
 
 // --- Save ---
 function submit() {
@@ -257,9 +180,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="doc-form relative">
+  <div class="doc-form">
     <h2>{{ localDoc._id ? "Edit Document" : "Add New Document" }}</h2>
-
     <form @submit.prevent="submit" class="new-doc">
       <div id="doc-header">
         <label for="title"><h3>Title</h3></label>
@@ -273,18 +195,13 @@ onUnmounted(() => {
           {{ localDoc._id ? "Save" : "Create" }}
         </button>
       </div>
-
-      <!-- ✅ container around textarea for cursor overlay -->
-      <div class="relative">
-        <textarea
-          ref="contentRef"
-          id="content"
-          placeholder="Content"
-          required
-          class="document-body"
-        ></textarea>
-        <div ref="cursorsContainer" class="absolute top-0 left-0 pointer-events-none"></div>
-      </div>
+      <textarea
+        ref="contentRef"
+        id="content"
+        placeholder="Content"
+        required
+        class="document-body"
+      ></textarea>
     </form>
   </div>
 </template>
