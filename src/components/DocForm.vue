@@ -15,6 +15,7 @@ import {
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
+import CommentsPanel from "./Comments.vue";
 
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
@@ -285,14 +286,13 @@ watch(
   }
 );
 
-
-function addComment() {
-  if (!selectedRange.value || !newCommentText.value.trim()) return;
+function handleAddComment(text) {
+  if (!selectedRange.value || !text) return;
   const { start, end } = selectedRange.value;
   const newComment = {
     id: crypto.randomUUID(),
     author: "Anonymous",
-    content: newCommentText.value.trim(),
+    content: text,
     createdAt: new Date().toISOString(),
     target: {
       start: Y.createRelativePositionFromTypeIndex(ytext, start),
@@ -300,8 +300,8 @@ function addComment() {
     },
   };
   ycomments.push([newComment]);
-  newCommentText.value = "";
 }
+
 
 
 function getLineNumber(comment) {
@@ -386,30 +386,12 @@ onUnmounted(() => {
         ></textarea>
 
         <div v-else ref="codeHostRef" class="code-editor"></div>
+          <CommentsPanel
+            :comments="comments"
+            :getLineNumber="getLineNumber"
+            @add="handleAddComment"
+          />
 
-        <div class="comments-panel">
-          <h3>Comments</h3>
-          <div
-            v-for="comment in comments"
-            :key="comment.id"
-            class="comment-item"
-          >
-            <strong>{{ comment.author }}</strong><br />
-            <small>Line: {{ getLineNumber(comment) }}</small>
-            <p>{{ comment.content }}</p>
-            <small>{{ new Date(comment.createdAt).toLocaleString() }}</small>
-          </div>
-
-          <div class="new-comment">
-            <textarea
-              id="comment-textarea"
-              v-model="newCommentText"
-              placeholder="Write a comment..."
-              rows="2"
-            ></textarea>
-            <button class="s-button" type="button" @click="addComment">Add Comment</button>
-          </div>
-        </div>
       </div>
     </form>
 
