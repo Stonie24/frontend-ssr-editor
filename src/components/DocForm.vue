@@ -11,7 +11,7 @@ import {
   createRelativePositionFromTypeIndex,
   createAbsolutePositionFromRelativePosition,
 } from "yjs";
-import { useAuth } from '../../composables/User.js'
+import { useAuth } from "../composables/User.js";
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
