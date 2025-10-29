@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted, nextTick } from "vue";
+import { ref, watch, onUnmounted, nextTick, computed } from "vue";
 import { io } from "socket.io-client";
 import * as Y from "yjs";
 import {
@@ -11,7 +11,7 @@ import {
   createRelativePositionFromTypeIndex,
   createAbsolutePositionFromRelativePosition,
 } from "yjs";
-
+import { useAuth } from '../../composables/User.js'
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
@@ -20,6 +20,10 @@ import CommentsPanel from "./Comments.vue";
 
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
+
+const { user } = useAuth()
+const userEmail = computed(() => user.value?.email ?? "");
+
 
 const localDoc = ref({ title: "", content: "", type: "text", _id: null });
 
@@ -290,7 +294,7 @@ function handleAddComment(text) {
   const { start, end } = selectedRange.value;
   const newComment = {
     id: crypto.randomUUID(),
-    author: "Anonymous",
+    author: userEmail.value || "Anonymous",
     content: text,
     createdAt: new Date().toISOString(),
     target: {
