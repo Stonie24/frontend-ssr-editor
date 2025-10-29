@@ -364,7 +364,7 @@ onUnmounted(() => {
           @click="toggleType"
         >
           <img
-            :src="localDoc.type === 'text' ? '/run.svg' : '/Profile.svg'"
+            :src="localDoc.type === 'text' ? 'https://stonie24.github.io/frontend-ssr-editor/texticon.svg' : 'https://stonie24.github.io/frontend-ssr-editor/codeicon.svg'"
             :alt="localDoc.type === 'text' ? 'Text Document Icon' : 'Code Document Icon'"
             class="icon"
           />
