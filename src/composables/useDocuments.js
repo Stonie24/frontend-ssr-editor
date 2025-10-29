@@ -14,17 +14,16 @@ export function useDocuments() {
       const res = await fetch(`${API_URL}/api/docs`, {
         headers: { Authorization: `Bearer ${token?.value || ''}` },
       });
-      console.log("Token used in fetchDocuments:", token?.value);
-      console.log("Fetch documents response:", res);
 
-      if (!res.ok) throw new Error("Unauthorized or failed to fetch docs");
+      if (!res.ok) {
+        throw new Error("Unauthorized or failed to fetch docs");
+      }
 
       const data = await res.json();
-      console.log("Fetched documents:", data);
       documents.value = data;
     } catch (err) {
-      error.value = err.message;
-      console.error("Fetch documents error:", err);
+        error.value = err.message;
+        console.error("Fetch documents error:", err);
     }
   };
 
@@ -34,7 +33,9 @@ export function useDocuments() {
     error.value = null;
     try {
       const response = await fetch(`${API_URL}/api/docs/${id}`);
-      if (!response.ok) throw new Error("Document not found");
+      if (!response.ok) {
+        throw new Error("Document not found");
+      }
       doc.value = await response.json();
     } catch (err) {
       error.value = err.message;
@@ -50,13 +51,15 @@ export function useDocuments() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token?.value || ''}` },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to add document");
+      if (!response.ok) {
+        throw new Error("Failed to add document");
+      }
       const result = await response.json();
       documents.value.push(result);
       return result;
     } catch (err) {
-      error.value = err.message;
-      return null;
+        error.value = err.message;
+        return null;
     }
   };
 
@@ -69,19 +72,23 @@ export function useDocuments() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token?.value || ''}` },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to update document");
+      if (!response.ok) {
+        throw new Error("Failed to update document");
+      }
       const result = await response.json();
       const index = documents.value.findIndex(d => d._id === id || d.id === id);
-          if (index !== -1) documents.value[index] = result;
+      if (index !== -1) {
+        documents.value[index] = result;
+      }
 
       return result;
     } catch (err) {
-      error.value = err.message;
-      return null;
+        error.value = err.message;
+        return null;
     }
   };
 
-  const shareDocument = async (docId, toMail) => {
+  const shareDocument = async (toMail, docId) => {
     try {
       const response = await fetch(`${API_URL}/api/sendMail`, {
         method: "POST",
@@ -95,11 +102,13 @@ export function useDocuments() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to share document");
+      if (!response.ok) {
+        throw new Error("Failed to share document");
+      }
       return await response.json();
     } catch (err) {
-      error.value = err.message;
-      return null;
+        error.value = err.message;
+        return null;
     }
   };
 
@@ -117,7 +126,9 @@ const executeCode = async (data) => {
       body: JSON.stringify(data),
     });
 
-    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
     const result = await response.json();
     const decodedOutput = atob(result.data);
     return decodedOutput;

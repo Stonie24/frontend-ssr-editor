@@ -22,8 +22,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { defineProps, defineEmits } from 'vue'
+import {ref, defineProps, defineEmits } from 'vue'
+import { useDocuments } from '../composables/useDocuments.js'
 
 const props = defineProps({
   label: {
@@ -37,12 +37,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['click', 'share'])
-
 const showModal = ref(false)
 const email = ref('')
 const error = ref('')
-
-import { useDocuments } from '../composables/useDocuments.js'
 const { shareDocument } = useDocuments()
 
 function openModal() {
@@ -71,7 +68,7 @@ async function sendShare() {
   }
 
   if (props.docId) {
-    const result = await shareDocument(props.docId, email.value)
+    const result = await shareDocument(email.value, props.docId)
     if (!result) {
       error.value = 'Failed to share document. Please try again.'
       return

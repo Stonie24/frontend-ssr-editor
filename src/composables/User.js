@@ -13,13 +13,15 @@ export function User() {
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message);
+      if (!response.ok) {
+        throw new Error(result.message);
+      }
       setAuth(result.token, result.user);
 
       return result;
     } catch (err) {
-      console.error("Login error:", err);
-      return null;
+        console.error("Login error:", err);
+        return null;
     }
   };
 
@@ -31,7 +33,9 @@ export function User() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
           });
-          if (!response.ok) throw new Error("Failed to sign up");
+          if (!response.ok) {
+            throw new Error("Failed to sign up");
+          }
           const result = await response.json();
           return result;
       } catch (err) {
@@ -39,8 +43,6 @@ export function User() {
           return null;
       }
   };
-
-
 
     return {
         LogIn,
@@ -67,10 +69,5 @@ export function useAuth() {
   }
 
   return { token, user, setAuth, clearAuth };
-}
-
-export function logout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
 }
 

@@ -17,19 +17,16 @@ const handleSubmit = async (event) => {
 	error.value = "";
 
 	try {
-			if (action === "login") {
-				const result = await LogIn(email.value, password.value);
-				console.log("Login:", result);
-				if (result && result.token) {
-					
-					router.push('/docs');
-					return;
-				} else {
-					error.value = 'Login failed. Check credentials.';
-				}
+		if (action === "login") {
+			const result = await LogIn(email.value, password.value);
+			if (result && result.token) {
+				router.push('/docs');
+				return;
+			} else {
+				error.value = 'Login failed. Check credentials.';
+			}
 		} else if (action === "signup") {
-			const result = await SignUp(email.value, password.value);
-			console.log("Signup:", result);
+			await SignUp(email.value, password.value);
 		}
 	} catch (err) {
 		error.value = "Something went wrong.";

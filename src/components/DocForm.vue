@@ -15,6 +15,7 @@ import {
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
+import CommentsPanel from "./Comments.vue";
 
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
@@ -47,7 +48,6 @@ const codeHostRef = ref(null);
 let cmView = null;
 
 const comments = ref([]);
-const newCommentText = ref("");
 const selectedRange = ref(null);
 
 
@@ -195,7 +195,6 @@ async function setupYjs(initialUpdate) {
     } else if (localDoc.value.type === "code" && cmView) {
       const doc = cmView.state.doc.toString();
       if (doc !== nextText) {
-        // bevara selection
         const sel = cmView.state.selection.main;
         cmView.dispatch({
           changes: { from: 0, to: cmView.state.doc.length, insert: nextText },
@@ -285,14 +284,13 @@ watch(
   }
 );
 
-
-function addComment() {
-  if (!selectedRange.value || !newCommentText.value.trim()) return;
+function handleAddComment(text) {
+  if (!selectedRange.value || !text) return;
   const { start, end } = selectedRange.value;
   const newComment = {
     id: crypto.randomUUID(),
     author: "Anonymous",
-    content: newCommentText.value.trim(),
+    content: text,
     createdAt: new Date().toISOString(),
     target: {
       start: Y.createRelativePositionFromTypeIndex(ytext, start),
@@ -300,9 +298,7 @@ function addComment() {
     },
   };
   ycomments.push([newComment]);
-  newCommentText.value = "";
 }
-
 
 function getLineNumber(comment) {
   if (!ydoc || !ytext || !comment.target) return "-";
@@ -312,7 +308,6 @@ function getLineNumber(comment) {
   const text = ytext.toString();
   return text.slice(0, index).split("\n").length;
 }
-
 
 function submit() {
   const now = new Date().toISOString();
@@ -346,9 +341,7 @@ onUnmounted(() => {
   <div class="doc-editor">
     <h2>{{ localDoc._id ? "Edit Document" : "Create Document" }}</h2>
 
-    <ShareButton
-      v-if="localDoc._id"
-      :docId="localDoc._id"
+    <ShareButton v-if="localDoc._id" :docId="localDoc._id"
       label="Share this document"
     />
 
@@ -358,10 +351,7 @@ onUnmounted(() => {
         <input id="title" v-model="localDoc.title" placeholder="Title" required />
         <button class="create-button" type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
 
-        <button
-          type="button"
-          v-if="localDoc.type === 'code'"
-          @click="runCode"
+        <button v-if="localDoc.type === 'code'" @click="runCode"
           :disabled="isRunning"
         >
           {{ isRunning ? 'Running...' : 'Run' }}
@@ -377,39 +367,18 @@ onUnmounted(() => {
 
       <div class="editor-container">
 
-        <textarea
-          v-if="localDoc.type === 'text'"
+        <textarea v-if="localDoc.type === 'text'"
           ref="contentRef"
           class="document-body"
           placeholder="Content"
-          required
-        ></textarea>
+          required>
+        </textarea>
 
         <div v-else ref="codeHostRef" class="code-editor"></div>
+          <CommentsPanel :comments="comments" :getLineNumber="getLineNumber"
+            @add="handleAddComment"
+          />
 
-        <div class="comments-panel">
-          <h3>Comments</h3>
-          <div
-            v-for="comment in comments"
-            :key="comment.id"
-            class="comment-item"
-          >
-            <strong>{{ comment.author }}</strong><br />
-            <small>Line: {{ getLineNumber(comment) }}</small>
-            <p>{{ comment.content }}</p>
-            <small>{{ new Date(comment.createdAt).toLocaleString() }}</small>
-          </div>
-
-          <div class="new-comment">
-            <textarea
-              id="comment-textarea"
-              v-model="newCommentText"
-              placeholder="Write a comment..."
-              rows="2"
-            ></textarea>
-            <button class="s-button" type="button" @click="addComment">Add Comment</button>
-          </div>
-        </div>
       </div>
     </form>
 

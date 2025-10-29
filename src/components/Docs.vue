@@ -20,7 +20,6 @@ const isLoggedIn = computed(() => !!token.value && !!user.value);
 onMounted(async () => {
   if (isLoggedIn.value) {
     await fetchDocuments();
-    console.log("Docs in component:", documents.value);
   }
 });
 
@@ -28,7 +27,6 @@ onMounted(async () => {
 const selectDoc = (doc) => {
   selectedDoc.value = { type: "text", ...doc };
 };
-
 
 const saveDoc = async (doc) => {
   try {
