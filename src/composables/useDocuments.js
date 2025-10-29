@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { useAuth } from "./User.js";
-const API_URL = "http://localhost:1337"/* "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/" */;
+const API_URL = "https://jsramverk-wisesang-e6hme9cec4d2fybq.northeurope-01.azurewebsites.net/";
 
 export function useDocuments() {
   const documents = ref([]);

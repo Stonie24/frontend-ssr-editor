@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="share-btn-container">
-         <button class="share-button" @click="openModal">  
+         <button type="button" class="share-button" @click="openModal">  
       
       <img src="/frontend-ssr-editor/share.svg" alt="share btn">
     </button>
