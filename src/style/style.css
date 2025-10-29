@@ -34,7 +34,6 @@ body {
 }
 
 h1 {
-  font-size: 3.2em;
   line-height: 1.1;
 }
 
@@ -97,6 +96,7 @@ h1 {
   min-height: 400px;
   max-width: 20vw;
   overflow-wrap: break-word; 
+  min-width: 20vw;
 }
 .comment-item {
   background: #242424;
@@ -117,7 +117,6 @@ h1 {
 
 .editor-container {
   position: relative;
-  width: 70vw;
   display: flex;
   gap: 1rem;
 }
@@ -153,3 +152,12 @@ textarea {
   border-radius: 4px;
   cursor: pointer;
 }
+
+.docs-container {
+  display: flex;
+ }
+
+ .doc-list {
+  display: flex;
+  flex-direction: column;
+ }
