@@ -1,17 +1,26 @@
 .error{
     color: #F00;
 }
+
+.login {
+    padding: 1rem;
+    height: 70vh;
+    background-color: #1b1b1b;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
 form{
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    width: 300px;
+    width: 350px;
     margin: 0 auto;
 }
 button{
     background-color: #141414;
 }
-.login-button{
+.login-button, .signup-button{
     color: white;
     padding: 10px;
     border: none;
@@ -19,16 +28,8 @@ button{
     cursor: pointer;
 }
 .login-button:hover{
-    background-color: #0056b3;
+    background-color: #005aba;
 }
 .signup-button:hover{
-    background-color: #28a745;
-}
-
-.signup-button{
-    color: white;
-    padding: 10px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
+    background-color: #257525;
 }
