@@ -14,7 +14,7 @@
 
 .code-editor {
     min-height: 50vh;
-    min-width: 68vw;
+    max-width: 65vw;
     font-family: inherit;
     padding: 1em;
     border-radius: 10px;
