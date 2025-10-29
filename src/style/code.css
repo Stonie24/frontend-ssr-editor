@@ -1,7 +1,7 @@
 .code-editor {
     min-height: 50vh;
     min-width: 60vw;
-    font-family: inherit;
+    font-family: monospace;
     padding: 1em;
     border-radius: 10px;
     border: 1px solid #3a3a3a;
@@ -13,7 +13,6 @@
     margin-top: 1rem;
     width: 60vw;
     min-height: 10vh;
-    font-family: inherit;
     padding: 1em;
     border-radius: 10px;
     background-color: #1a1a1a;
