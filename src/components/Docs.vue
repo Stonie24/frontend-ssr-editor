@@ -16,7 +16,6 @@ const selectedDoc = ref({
 
 const { user, token } = useAuth();
 const isLoggedIn = computed(() => !!token.value && !!user.value);
-const userEmail = computed(() => user.value?.email ?? "");
 
 onMounted(async () => {
   if (isLoggedIn.value) {
@@ -59,18 +58,19 @@ const newDoc = () => {
 <template>
   <div id="entire-app">
     <div v-if="isLoggedIn">
-      <p>Welcome, {{ userEmail }}</p>
-      <div>
-        <button @click="newDoc">New Document</button>
+      <div class="docs-container">
+        <DocumentList
+          :documents="documents"
+          @select="selectDoc"
+          @new-doc="newDoc"
+        />
+
+        <DocumentForm
+          :key="selectedDoc?._id || 'new'"
+          :doc="selectedDoc"
+          @save="saveDoc"
+        />
       </div>
-
-      <DocumentList :documents="documents" @select="selectDoc" />
-
-      <DocumentForm
-        :key="selectedDoc?._id || 'new'"
-        :doc="selectedDoc"
-        @save="saveDoc"
-      />
     </div>
 
     <div v-else>

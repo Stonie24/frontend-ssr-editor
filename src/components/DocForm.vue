@@ -356,7 +356,7 @@ onUnmounted(() => {
       <div id="doc-header">
         <label for="title"><h3>Title</h3></label>
         <input id="title" v-model="localDoc.title" placeholder="Title" required />
-        <button type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
+        <button class="create-button" type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
 
         <button
           type="button"
