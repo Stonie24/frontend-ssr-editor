@@ -1,8 +1,13 @@
 <template>
   <div>
-    <button class="button" @click="openModal">
-      {{ label }}
+    <div class="share-btn-container">
+         <button class="share-button" @click="openModal">  
+      
+      <img src="/frontend-ssr-editor/share.svg" alt="share btn">
     </button>
+    {{ label }}
+    </div>
+   
 
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal">

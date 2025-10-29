@@ -1,40 +1,49 @@
-.document-body {
+/* Editor text area */
+.document-body,
+.code-editor {
+  width: 100%;
   min-height: 80vh;
-  min-width: 70vw;
   font-family: inherit;
   font-size: 1em;
   line-height: 1.5;
-  padding: 1em;
+  padding: 1.2em; /* slightly more padding for comfort */
+  padding-top: 3.5em; /* leave space for share/run button */
   border-radius: 8px;
   border: 1px solid #3a3a3a;
   background-color: #1a1a1a;
   color: rgba(255, 255, 255, 0.87);
   resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 
-.doc-header {
+.document-body:focus,
+.code-editor:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+/* Header */
+#doc-header {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1em;
-}
-#doc-header  {
-  display: grid;
-  justify-content: center;
-  gap: 1em;
-  margin-bottom: 1rem;
+  max-width: 70vw;
 }
 
-#title{
+/* Title input */
+#title {
   font-size: 1.2em;
-}
-.all-docs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1em;
+  background-color: #121212;
+  color: #fff;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 0.4em 0.8em;
 }
 
-
+/* Buttons */
 .create-button {
   border-radius: 8px;
   border: 1px solid #ffffff;
@@ -44,21 +53,91 @@
   font-family: inherit;
   background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.25s, background-color 0.2s;
 }
 .create-button:hover {
   border-color: #646cff;
-}
-.create-button:focus,
-.create-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  background-color: #242424;
 }
 
+/* Plus button */
 #plusbtn {  
   padding-top: 8px;
 }
-
 .plusbtn-all {  
   background-color: #242424;
   border: none;
+  cursor: pointer;
+}
+.plusbtn-all:hover {
+  background-color: #3a3a3a;
+}
+
+/* Editor wrapper */
+.editor-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Share button */
+.sharebtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 11; 
+  background-color: #1a1a1a;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.sharebtn:hover {
+  background-color: #494949;
+}
+
+
+/* Output container + Run button */
+.run-output-container {
+  position: relative;
+  margin-top: 1em;
+  background-color: #0f0f0f;
+  border-radius: 8px;
+  padding: 1em;
+}
+
+.run-button {
+  position: absolute;
+  top: 34px;
+  right: 18px;
+  z-index: 10;
+  background-color: #1a1a1a;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.run-button:hover {
+  background-color: #494949;
+}
+.run-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Output content */
+.run-output {
+  padding-top: 0px; 
+  color: #fff;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.95em;
+  background-color: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #3a3a3a;
 }

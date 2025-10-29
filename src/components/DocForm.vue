@@ -17,6 +17,7 @@ import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
 import CommentsPanel from "./Comments.vue";
 
+
 const props = defineProps(["doc"]);
 const emit = defineEmits(["save"]);
 
@@ -309,6 +310,12 @@ function getLineNumber(comment) {
   return text.slice(0, index).split("\n").length;
 }
 
+// Swap between text and code types
+function toggleType() {
+  localDoc.value.type = localDoc.value.type === "text" ? "code" : "text";
+  console.log("Toggled type:", localDoc.value.type);
+}
+
 function submit() {
   const now = new Date().toISOString();
   const content = ytext ? ytext.toString() : localDoc.value.content;
@@ -339,54 +346,90 @@ onUnmounted(() => {
 
 <template>
   <div class="doc-editor">
-    <h2>{{ localDoc._id ? "Edit Document" : "Create Document" }}</h2>
-
-    <ShareButton v-if="localDoc._id" :docId="localDoc._id"
-      label="Share this document"
-    />
+  
+   
 
     <form @submit.prevent="submit" class="new-doc">
+    
       <div id="doc-header">
-        <label for="title"><h3>Title</h3></label>
-        <input id="title" v-model="localDoc.title" placeholder="Title" required />
+        <div class="title-input">
+          <label for="title"><h3>Title</h3></label>
+          <input id="title" v-model="localDoc.title" placeholder="Title" required />
+        </div>
+       
+        <button
+          type="button"
+          class="toggle-btn"
+          :disabled="!!localDoc._id"
+          @click="toggleType"
+        >
+          <img
+            :src="localDoc.type === 'text' ? '/frontend-ssr-editor/texticon.svg' : '/frontend-ssr-editor/codeicon.svg'"
+            :alt="localDoc.type === 'text' ? 'Text Document Icon' : 'Code Document Icon'"
+            class="icon"
+          />
+        </button> 
         <button class="create-button" type="submit">{{ localDoc._id ? "Save" : "Create" }}</button>
 
-        <button v-if="localDoc.type === 'code'" @click="runCode"
-          :disabled="isRunning"
-        >
-          {{ isRunning ? 'Running...' : 'Run' }}
-        </button>
+     
       </div>
 
-      <label>Document type</label>
-      <select v-model="localDoc.type" :disabled="!!localDoc._id">
-        <option value="text">Plain Text</option>
-        <option value="code">JavaScript Code</option>
-      </select>
+    
+      
+      
 
 
       <div class="editor-container">
+        <div class="editor-wrapper">
 
-        <textarea v-if="localDoc.type === 'text'"
-          ref="contentRef"
-          class="document-body"
-          placeholder="Content"
-          required>
-        </textarea>
+          <!-- Editor area + Share button -->
+          <div class="editor-with-share">
+            <ShareButton
+              v-if="localDoc._id"
+              :docId="localDoc._id"
+              label="Share"
+              class="sharebtn"
+            />
+            
+            <textarea
+              v-if="localDoc.type === 'text'"
+              ref="contentRef"
+              class="document-body"
+              placeholder="Content"
+              required
+            ></textarea>
 
-        <div v-else ref="codeHostRef" class="code-editor"></div>
-          <CommentsPanel :comments="comments" :getLineNumber="getLineNumber"
-            @add="handleAddComment"
-          />
+            <div v-else ref="codeHostRef" class="code-editor"></div>
+          </div>
 
+          <!-- Output area + Run button -->
+          <div v-if="localDoc.type === 'code'" class="run-output-container">
+            <button
+              @click="runCode"
+              :disabled="isRunning"
+              class="run-button"
+            >
+              <img src="/frontend-ssr-editor/run.svg" width="30" alt="Run">
+            </button>
+
+            <div class="run-output">
+              <h3>Output</h3>
+              <div v-if="isRunning">Running...</div>
+              <pre v-else>{{ runOutput }}</pre>
+            </div>
+          </div>
+
+        </div>
+
+        <CommentsPanel
+          :comments="comments"
+          :getLineNumber="getLineNumber"
+          @add="handleAddComment"
+        />
       </div>
     </form>
 
-    <div v-if="localDoc.type === 'code'" class="run-output">
-      <h3>Output</h3>
-      <div v-if="isRunning">Running...</div>
-      <pre v-else>{{ runOutput }}</pre>
-    </div>
+    
   </div>
 </template>
 
