@@ -1,7 +1,21 @@
+.document-body {
+  min-height: 80vh;
+  min-width: 70vw;
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1.5;
+  padding: 1em;
+  border-radius: 8px;
+  border: 1px solid #3a3a3a;
+  background-color: #1a1a1a;
+  color: rgba(255, 255, 255, 0.87);
+  resize: vertical;
+}
+
 .code-editor {
     min-height: 50vh;
-    min-width: 60vw;
-    font-family: monospace;
+    min-width: 70vw;
+    font-family: inherit;
     padding: 1em;
     border-radius: 10px;
     border: 1px solid #3a3a3a;
@@ -11,8 +25,9 @@
 }
 .run-output{
     margin-top: 1rem;
-    width: 60vw;
-    min-height: 10vh;
+    width: 70vw;
+    min-height: 15vh;
+    font-family: inherit;
     padding: 1em;
     border-radius: 10px;
     background-color: #1a1a1a;

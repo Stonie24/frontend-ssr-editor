@@ -54,7 +54,18 @@
   gap: 8px;
   margin-top: 12px;
 }
+.share-button img {
+  width: 30px;
 
+}
+.share-button {
+  background-color: #1a1a1a;
+  border: none;
+}
+.share-btn-container {
+  display: flex;
+  flex-direction: column;
+}
 .btn {
   padding: 8px 12px;
   border-radius: 6px;
