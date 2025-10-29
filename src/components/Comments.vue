@@ -39,17 +39,3 @@ function submit() {
     </div>
   </div>
 </template>
-
-<style scoped>
-.comments-panel {
-  margin-top: 1rem;
-}
-.comment-item {
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 0.5rem;
-}
-.new-comment textarea {
-  width: 100%;
-}
-</style>
