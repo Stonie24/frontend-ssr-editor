@@ -364,7 +364,7 @@ onUnmounted(() => {
           @click="toggleType"
         >
           <img
-            :src="localDoc.type === 'text' ? '/frontend-ssr-editor/texticon.svg' : '/frontend-ssr-editor/codeicon.svg'"
+            :src="localDoc.type === 'text' ? '/texticon.svg' : '/codeicon.svg'"
             :alt="localDoc.type === 'text' ? 'Text Document Icon' : 'Code Document Icon'"
             class="icon"
           />
@@ -409,7 +409,7 @@ onUnmounted(() => {
               :disabled="isRunning"
               class="run-button"
             >
-              <img src="/frontend-ssr-editor/run.svg" width="30" alt="Run">
+              <img src="/run.svg" width="30" alt="Run">
             </button>
 
             <div class="run-output">

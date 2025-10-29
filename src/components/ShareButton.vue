@@ -3,7 +3,7 @@
     <div class="share-btn-container">
          <button type="button" class="share-button" @click="openModal">  
       
-      <img src="/frontend-ssr-editor/share.svg" alt="share btn">
+      <img src="/share.svg" alt="share btn">
     </button>
     {{ label }}
     </div>
