@@ -364,7 +364,7 @@ onUnmounted(() => {
           @click="toggleType"
         >
           <img
-            :src="localDoc.type === 'text' ? '/texticon.svg' : '/codeicon.svg'"
+            :src="localDoc.type === 'text' ? '/run.svg' : '/Profile.svg'"
             :alt="localDoc.type === 'text' ? 'Text Document Icon' : 'Code Document Icon'"
             class="icon"
           />
